@@ -14,10 +14,10 @@ np.random.seed(0)
 random.seed(0)
 
 # Build ShapeNet dataset, follow https://github.com/autonomousvision/occupancy_networks#building-the-dataset
-input_path_watertight = 'path/to/watertight_mesh_folder'
+input_path_watertight = 'mesh_path/to/watertight_mesh_folder'
 # folder structure: classes -> 2_watertight -> *.off
 
-input_path_splits = 'path/to/split_files'
+input_path_splits = 'mesh_path/to/split_files'
 # folder structure: classes -> {train, val, test}.lst
 
 output_path = 'data/synthetic_room_dataset'

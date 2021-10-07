@@ -3,16 +3,15 @@ Codes are from:
 https://github.com/jaxony/unet-pytorch/blob/master/model.py
 '''
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
-from collections import OrderedDict
 from torch.nn import init
-import numpy as np
 
-def conv3x3(in_channels, out_channels, stride=1, 
-            padding=1, bias=True, groups=1):    
+
+def conv3x3(in_channels, out_channels, stride=1,
+            padding=1, bias=True, groups=1):
     return nn.Conv2d(
         in_channels,
         out_channels,
@@ -21,6 +20,7 @@ def conv3x3(in_channels, out_channels, stride=1,
         padding=padding,
         bias=bias,
         groups=groups)
+
 
 def upconv2x2(in_channels, out_channels, mode='transpose'):
     if mode == 'transpose':
@@ -36,6 +36,7 @@ def upconv2x2(in_channels, out_channels, mode='transpose'):
             nn.Upsample(mode='bilinear', scale_factor=2),
             conv1x1(in_channels, out_channels))
 
+
 def conv1x1(in_channels, out_channels, groups=1):
     return nn.Conv2d(
         in_channels,
@@ -50,6 +51,7 @@ class DownConv(nn.Module):
     A helper Module that performs 2 convolutions and 1 MaxPool.
     A ReLU activation follows each convolution.
     """
+
     def __init__(self, in_channels, out_channels, pooling=True):
         super(DownConv, self).__init__()
 
@@ -77,7 +79,8 @@ class UpConv(nn.Module):
     A helper Module that performs 2 convolutions and 1 UpConvolution.
     A ReLU activation follows each convolution.
     """
-    def __init__(self, in_channels, out_channels, 
+
+    def __init__(self, in_channels, out_channels,
                  merge_mode='concat', up_mode='transpose'):
         super(UpConv, self).__init__()
 
@@ -86,17 +89,16 @@ class UpConv(nn.Module):
         self.merge_mode = merge_mode
         self.up_mode = up_mode
 
-        self.upconv = upconv2x2(self.in_channels, self.out_channels, 
-            mode=self.up_mode)
+        self.upconv = upconv2x2(self.in_channels, self.out_channels,
+                                mode=self.up_mode)
 
         if self.merge_mode == 'concat':
             self.conv1 = conv3x3(
-                2*self.out_channels, self.out_channels)
+                2 * self.out_channels, self.out_channels)
         else:
             # num of input channels to conv2 is same
             self.conv1 = conv3x3(self.out_channels, self.out_channels)
         self.conv2 = conv3x3(self.out_channels, self.out_channels)
-
 
     def forward(self, from_down, from_up):
         """ Forward pass
@@ -137,8 +139,8 @@ class UNet(nn.Module):
         the tranpose convolution (specified by upmode='transpose')
     """
 
-    def __init__(self, num_classes, in_channels=3, depth=5, 
-                 start_filts=64, up_mode='transpose', 
+    def __init__(self, num_classes, in_channels=3, depth=5,
+                 start_filts=64, up_mode='transpose',
                  merge_mode='concat', **kwargs):
         """
         Arguments:
@@ -159,7 +161,7 @@ class UNet(nn.Module):
             raise ValueError("\"{}\" is not a valid mode for "
                              "upsampling. Only \"transpose\" and "
                              "\"upsample\" are allowed.".format(up_mode))
-    
+
         if merge_mode in ('concat', 'add'):
             self.merge_mode = merge_mode
         else:
@@ -187,19 +189,19 @@ class UNet(nn.Module):
         # create the encoder pathway and add to a list
         for i in range(depth):
             ins = self.in_channels if i == 0 else outs
-            outs = self.start_filts*(2**i)
-            pooling = True if i < depth-1 else False
+            outs = self.start_filts * (2 ** i)
+            pooling = True if i < depth - 1 else False
 
             down_conv = DownConv(ins, outs, pooling=pooling)
             self.down_convs.append(down_conv)
 
         # create the decoder pathway and add to a list
         # - careful! decoding only requires depth-1 blocks
-        for i in range(depth-1):
+        for i in range(depth - 1):
             ins = outs
             outs = ins // 2
             up_conv = UpConv(ins, outs, up_mode=up_mode,
-                merge_mode=merge_mode)
+                             merge_mode=merge_mode)
             self.up_convs.append(up_conv)
 
         # add the list of modules to current module
@@ -216,11 +218,9 @@ class UNet(nn.Module):
             init.xavier_normal_(m.weight)
             init.constant_(m.bias, 0)
 
-
     def reset_params(self):
         for i, m in enumerate(self.modules()):
             self.weight_init(m)
-
 
     def forward(self, x):
         encoder_outs = []
@@ -229,14 +229,15 @@ class UNet(nn.Module):
             x, before_pool = module(x)
             encoder_outs.append(before_pool)
         for i, module in enumerate(self.up_convs):
-            before_pool = encoder_outs[-(i+2)]
+            before_pool = encoder_outs[-(i + 2)]
             x = module(before_pool, x)
-        
+
         # No softmax is used. This means you need to use
         # nn.CrossEntropyLoss is your training script,
         # as this module includes a softmax already.
         x = self.conv_final(x)
         return x
+
 
 if __name__ == "__main__":
     """
@@ -248,11 +249,11 @@ if __name__ == "__main__":
 
     reso = 176
     x = np.zeros((1, 1, reso, reso))
-    x[:,:,int(reso/2-1), int(reso/2-1)] = np.nan
+    x[:, :, int(reso / 2 - 1), int(reso / 2 - 1)] = np.nan
     x = torch.FloatTensor(x)
 
     out = model(x)
-    print('%f'%(torch.sum(torch.isnan(out)).detach().cpu().numpy()/(reso*reso)))
-    
+    print('%f' % (torch.sum(torch.isnan(out)).detach().cpu().numpy() / (reso * reso)))
+
     # loss = torch.sum(out)
     # loss.backward()

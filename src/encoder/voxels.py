@@ -2,9 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter_mean
+
+from src.common import coordinate2index, normalize_coordinate, normalize_3d_coordinate
 from src.encoder.unet import UNet
 from src.encoder.unet3d import UNet3D
-from src.common import coordinate2index, normalize_coordinate, normalize_3d_coordinate
 
 
 class LocalVoxelEncoder(nn.Module):
@@ -26,7 +27,7 @@ class LocalVoxelEncoder(nn.Module):
     
     '''
 
-    def __init__(self, dim=3, c_dim=128, unet=False, unet_kwargs=None, unet3d=False, unet3d_kwargs=None, 
+    def __init__(self, dim=3, c_dim=128, unet=False, unet_kwargs=None, unet3d=False, unet3d_kwargs=None,
                  plane_resolution=512, grid_resolution=None, plane_type='xz', kernel_size=3, padding=0.1):
         super().__init__()
         self.actvn = F.relu
@@ -59,7 +60,7 @@ class LocalVoxelEncoder(nn.Module):
         index = coordinate2index(xy, self.reso_plane)
 
         # scatter plane features from points
-        fea_plane = c.new_zeros(p.size(0), self.c_dim, self.reso_plane**2)
+        fea_plane = c.new_zeros(p.size(0), self.c_dim, self.reso_plane ** 2)
         c = c.permute(0, 2, 1)
         fea_plane = scatter_mean(c, index, out=fea_plane)
         fea_plane = fea_plane.reshape(p.size(0), self.c_dim, self.reso_plane, self.reso_plane)
@@ -74,7 +75,7 @@ class LocalVoxelEncoder(nn.Module):
         p_nor = normalize_3d_coordinate(p.clone(), padding=self.padding)
         index = coordinate2index(p_nor, self.reso_grid, coord_type='3d')
         # scatter grid features from points
-        fea_grid = c.new_zeros(p.size(0), self.c_dim, self.reso_grid**3)
+        fea_grid = c.new_zeros(p.size(0), self.c_dim, self.reso_grid ** 3)
         c = c.permute(0, 2, 1)
         fea_grid = scatter_mean(c, index, out=fea_grid)
         fea_grid = fea_grid.reshape(p.size(0), self.c_dim, self.reso_grid, self.reso_grid, self.reso_grid)
@@ -83,7 +84,6 @@ class LocalVoxelEncoder(nn.Module):
             fea_grid = self.unet3d(fea_grid)
 
         return fea_grid
-
 
     def forward(self, x):
         batch_size = x.size(0)
@@ -117,6 +117,7 @@ class LocalVoxelEncoder(nn.Module):
             if 'yz' in self.plane_type:
                 fea['yz'] = self.generate_plane_features(p, c, plane='yz')
         return fea
+
 
 class VoxelEncoder(nn.Module):
     ''' 3D-convolutional encoder network for voxel input.

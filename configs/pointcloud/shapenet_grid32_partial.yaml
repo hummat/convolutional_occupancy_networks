@@ -13,21 +13,22 @@ model:
   encoder: pointnet_local_pool
   encoder_kwargs:
     hidden_dim: 32
-    plane_type: [ "xz", "xy", "yz" ]
-    plane_resolution: 64
-    unet: True
-    unet_kwargs:
-      depth: 4
-      merge_mode: concat
-      start_filts: 32
+    plane_type: "grid"
+    grid_resolution: 32
+    unet3d: True
+    unet3d_kwargs:
+      num_levels: 3
+      f_maps: 32
+      in_channels: 32
+      out_channels: 32
   decoder: simple_local
   decoder_kwargs:
     sample_mode: bilinear # bilinear / nearest
     hidden_size: 32
   c_dim: 32
 training:
-  pre_trained_weights: https://s3.eu-central-1.amazonaws.com/avg-projects/convolutional_occupancy_networks/models/pointcloud/shapenet_3plane.pt
-  out_dir: out/pointcloud/partial_shapenet_3plane_bottle
+  pre_trained_weights: https://s3.eu-central-1.amazonaws.com/avg-projects/convolutional_occupancy_networks/models/pointcloud/shapenet_grid32.pt
+  out_dir: out/pointcloud/partial_shapenet_grid32_bottle
   batch_size: 32
   model_selection_metric: f-score
   model_selection_mode: maximize

@@ -1,4 +1,3 @@
-
 from src.data.core import (
     Shapes3dDataset, collate_remove_none, worker_init_fn
 )
@@ -8,8 +7,9 @@ from src.data.fields import (
 )
 from src.data.transforms import (
     PointcloudNoise, SubsamplePointcloud,
-    SubsamplePoints,
+    SubsamplePoints, RotatePointcloud
 )
+
 __all__ = [
     # Core
     Shapes3dDataset,
@@ -27,4 +27,5 @@ __all__ = [
     PointcloudNoise,
     SubsamplePointcloud,
     SubsamplePoints,
+    RotatePointcloud
 ]

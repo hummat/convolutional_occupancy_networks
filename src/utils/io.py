@@ -28,7 +28,7 @@ def read_off(file):
     """
     Reads vertices and faces from an off file.
 
-    :param file: path to file to read
+    :param file: mesh_path to file to read
     :type file: str
     :return: vertices and faces as lists of tuples
     :rtype: [(float)], [(int)]

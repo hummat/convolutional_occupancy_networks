@@ -104,7 +104,7 @@ class SensorData:
       depth = np.fromstring(depth_data, dtype=np.uint16).reshape(self.depth_height, self.depth_width)
       if image_size is not None:
         depth = cv2.resize(depth, (image_size[1], image_size[0]), interpolation=cv2.INTER_NEAREST)
-      # imageio.imwrite(os.path.join(output_path, str(f) + '.png'), depth)
+      # imageio.imwrite(os.mesh_path.join(output_path, str(f) + '.png'), depth)
       imageio.imwrite(os.path.join(output_path, '%06d.png' % f), depth)
 
   def export_color_images(self, output_path, image_size=None, frame_skip=1):

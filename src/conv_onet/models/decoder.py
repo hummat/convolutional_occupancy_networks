@@ -30,7 +30,6 @@ class LocalDecoder(nn.Module):
                 nn.Linear(c_dim, hidden_size) for i in range(n_blocks)
             ])
 
-
         self.fc_p = nn.Linear(dim, hidden_size)
 
         self.blocks = nn.ModuleList([
@@ -46,23 +45,22 @@ class LocalDecoder(nn.Module):
 
         self.sample_mode = sample_mode
         self.padding = padding
-    
 
     def sample_plane_feature(self, p, c, plane='xz'):
-        xy = normalize_coordinate(p.clone(), plane=plane, padding=self.padding) # normalize to the range of (0, 1)
+        xy = normalize_coordinate(p.clone(), plane=plane, padding=self.padding)  # normalize to the range of (0, 1)
         xy = xy[:, :, None].float()
-        vgrid = 2.0 * xy - 1.0 # normalize to (-1, 1)
+        vgrid = 2.0 * xy - 1.0  # normalize to (-1, 1)
         c = F.grid_sample(c, vgrid, padding_mode='border', align_corners=True, mode=self.sample_mode).squeeze(-1)
         return c
 
     def sample_grid_feature(self, p, c):
-        p_nor = normalize_3d_coordinate(p.clone(), padding=self.padding) # normalize to the range of (0, 1)
+        p_nor = normalize_3d_coordinate(p.clone(), padding=self.padding)  # normalize to the range of (0, 1)
         p_nor = p_nor[:, :, None, None].float()
-        vgrid = 2.0 * p_nor - 1.0 # normalize to (-1, 1)
+        vgrid = 2.0 * p_nor - 1.0  # normalize to (-1, 1)
         # acutally trilinear interpolation if mode = 'bilinear'
-        c = F.grid_sample(c, vgrid, padding_mode='border', align_corners=True, mode=self.sample_mode).squeeze(-1).squeeze(-1)
+        c = F.grid_sample(c, vgrid, padding_mode='border', align_corners=True, mode=self.sample_mode).squeeze(
+            -1).squeeze(-1)
         return c
-
 
     def forward(self, p, c_plane, **kwargs):
         if self.c_dim != 0:
@@ -112,7 +110,8 @@ class PatchLocalDecoder(nn.Module):
     '''
 
     def __init__(self, dim=3, c_dim=128,
-                 hidden_size=256, leaky=False, n_blocks=5, sample_mode='bilinear', local_coord=False, pos_encoding='linear', unit_size=0.1, padding=0.1):
+                 hidden_size=256, leaky=False, n_blocks=5, sample_mode='bilinear', local_coord=False,
+                 pos_encoding='linear', unit_size=0.1, padding=0.1):
         super().__init__()
         self.c_dim = c_dim
         self.n_blocks = n_blocks
@@ -122,7 +121,7 @@ class PatchLocalDecoder(nn.Module):
                 nn.Linear(c_dim, hidden_size) for i in range(n_blocks)
             ])
 
-        #self.fc_p = nn.Linear(dim, hidden_size)
+        # self.fc_p = nn.Linear(dim, hidden_size)
         self.fc_out = nn.Linear(hidden_size, 1)
         self.blocks = nn.ModuleList([
             ResnetBlockFC(hidden_size) for i in range(n_blocks)
@@ -144,16 +143,17 @@ class PatchLocalDecoder(nn.Module):
             self.fc_p = nn.Linear(60, hidden_size)
         else:
             self.fc_p = nn.Linear(dim, hidden_size)
-    
+
     def sample_feature(self, xy, c, fea_type='2d'):
         if fea_type == '2d':
             xy = xy[:, :, None].float()
-            vgrid = 2.0 * xy - 1.0 # normalize to (-1, 1)
+            vgrid = 2.0 * xy - 1.0  # normalize to (-1, 1)
             c = F.grid_sample(c, vgrid, padding_mode='border', align_corners=True, mode=self.sample_mode).squeeze(-1)
         else:
             xy = xy[:, :, None, None].float()
-            vgrid = 2.0 * xy - 1.0 # normalize to (-1, 1)
-            c = F.grid_sample(c, vgrid, padding_mode='border', align_corners=True, mode=self.sample_mode).squeeze(-1).squeeze(-1)
+            vgrid = 2.0 * xy - 1.0  # normalize to (-1, 1)
+            c = F.grid_sample(c, vgrid, padding_mode='border', align_corners=True, mode=self.sample_mode).squeeze(
+                -1).squeeze(-1)
         return c
 
     def forward(self, p, c_plane, **kwargs):
@@ -176,7 +176,7 @@ class PatchLocalDecoder(nn.Module):
         p = p.float()
         if self.map2local:
             p = self.map2local(p)
-        
+
         net = self.fc_p(p)
         for i in range(self.n_blocks):
             if self.c_dim != 0:
@@ -187,6 +187,7 @@ class PatchLocalDecoder(nn.Module):
         out = out.squeeze(-1)
 
         return out
+
 
 class LocalPointDecoder(nn.Module):
     ''' Decoder for PointConv Baseline.
@@ -211,7 +212,6 @@ class LocalPointDecoder(nn.Module):
                 nn.Linear(c_dim, hidden_size) for i in range(n_blocks)
             ])
 
-
         self.fc_p = nn.Linear(dim, hidden_size)
 
         self.blocks = nn.ModuleList([
@@ -227,24 +227,24 @@ class LocalPointDecoder(nn.Module):
 
         self.sample_mode = sample_mode
         if sample_mode == 'gaussian':
-            self.var = kwargs['gaussian_val']**2
+            self.var = kwargs['gaussian_val'] ** 2
 
     def sample_point_feature(self, q, p, fea):
         # q: B x M x 3
         # p: B x N x 3
         # fea: B x N x c_dim
-        #p, fea = c
+        # p, fea = c
         if self.sample_mode == 'gaussian':
             # distance betweeen each query point to the point cloud
-            dist = -((p.unsqueeze(1).expand(-1, q.size(1), -1, -1) - q.unsqueeze(2)).norm(dim=3)+10e-6)**2
-            weight = (dist/self.var).exp() # Guassian kernel
+            dist = -((p.unsqueeze(1).expand(-1, q.size(1), -1, -1) - q.unsqueeze(2)).norm(dim=3) + 10e-6) ** 2
+            weight = (dist / self.var).exp()  # Guassian kernel
         else:
-            weight = 1/((p.unsqueeze(1).expand(-1, q.size(1), -1, -1) - q.unsqueeze(2)).norm(dim=3)+10e-6)
+            weight = 1 / ((p.unsqueeze(1).expand(-1, q.size(1), -1, -1) - q.unsqueeze(2)).norm(dim=3) + 10e-6)
 
-        #weight normalization
-        weight = weight/weight.sum(dim=2).unsqueeze(-1)
+        # weight normalization
+        weight = weight / weight.sum(dim=2).unsqueeze(-1)
 
-        c_out = weight @ fea # B x M x c_dim
+        c_out = weight @ fea  # B x M x c_dim
 
         return c_out
 
@@ -260,7 +260,7 @@ class LocalPointDecoder(nn.Module):
             c = torch.cat(c_list, dim=1)
 
         else:
-           if self.c_dim != 0:
+            if self.c_dim != 0:
                 pp, fea = c
                 c = self.sample_point_feature(p, pp, fea)
 

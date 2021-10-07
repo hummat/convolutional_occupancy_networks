@@ -9,13 +9,10 @@ from src.eval import MeshEvaluator
 from src.utils.io import load_pointcloud
 
 
-parser = argparse.ArgumentParser(
-    description='Evaluate mesh algorithms.'
-)
+parser = argparse.ArgumentParser(description='Evaluate mesh algorithms.')
 parser.add_argument('config', type=str, help='Path to config file.')
 parser.add_argument('--no-cuda', action='store_true', help='Do not use cuda.')
-parser.add_argument('--eval_input', action='store_true',
-                    help='Evaluate inputs instead.')
+parser.add_argument('--eval_input', action='store_true', help='Evaluate inputs instead.')
 
 args = parser.parse_args()
 cfg = config.load_config(args.config, 'configs/default.yaml')
@@ -62,8 +59,7 @@ dataset = data.Shapes3dDataset(
 evaluator = MeshEvaluator(n_points=100000)
 
 # Loader
-test_loader = torch.utils.data.DataLoader(
-    dataset, batch_size=1, num_workers=0, shuffle=False)
+test_loader = torch.utils.data.DataLoader(dataset, batch_size=1, num_workers=0, shuffle=False)
 
 # Evaluate all classes
 eval_dicts = []
@@ -127,8 +123,12 @@ for it, data in enumerate(tqdm(test_loader)):
         if os.path.exists(mesh_file):
             try:
                 mesh = trimesh.load(mesh_file, process=False)
-                eval_dict_mesh = evaluator.eval_mesh(
-                    mesh, pointcloud_tgt, normals_tgt, points_tgt, occ_tgt, remove_wall=cfg['test']['remove_wall'])
+                eval_dict_mesh = evaluator.eval_mesh(mesh,
+                                                     pointcloud_tgt,
+                                                     normals_tgt,
+                                                     points_tgt,
+                                                     occ_tgt,
+                                                     remove_wall=cfg['test']['remove_wall'])
                 for k, v in eval_dict_mesh.items():
                     eval_dict[k + ' (mesh)'] = v
             except Exception as e:
@@ -138,13 +138,11 @@ for it, data in enumerate(tqdm(test_loader)):
 
     # Evaluate point cloud
     if cfg['test']['eval_pointcloud']:
-        pointcloud_file = os.path.join(
-            pointcloud_dir, '%s.ply' % modelname)
+        pointcloud_file = os.path.join(pointcloud_dir, '%s.ply' % modelname)
 
         if os.path.exists(pointcloud_file):
             pointcloud = load_pointcloud(pointcloud_file)
-            eval_dict_pcl = evaluator.eval_pointcloud(
-                pointcloud, pointcloud_tgt)
+            eval_dict_pcl = evaluator.eval_pointcloud(pointcloud, pointcloud_tgt)
             for k, v in eval_dict_pcl.items():
                 eval_dict[k + ' (pcl)'] = v
         else:

@@ -1,37 +1,37 @@
 import os
-import glob
-import random
-from PIL import Image
+
 import numpy as np
-import trimesh
+
+from src.common import coord2index, normalize_coord
 from src.data.core import Field
 from src.utils import binvox_rw
-from src.common import coord2index, normalize_coord
 
 
 class IndexField(Field):
-    ''' Basic index field.'''
+    """ Basic index field."""
+
     def load(self, model_path, idx, category):
-        ''' Loads the index field.
+        """ Loads the index field.
 
         Args:
-            model_path (str): path to model
+            model_path (str): mesh_path to model
             idx (int): ID of data point
             category (int): index of category
-        '''
+        """
         return idx
 
     def check_complete(self, files):
-        ''' Check if field is complete.
+        """ Check if field is complete.
         
         Args:
             files: files
-        '''
+        """
         return True
+
 
 # 3D Fields
 class PatchPointsField(Field):
-    ''' Patch Point Field.
+    """ Patch Point Field.
 
     It provides the field to load point data. This is used for the points
     randomly sampled in the bounding volume of the 3D shape and then split to patches.
@@ -41,21 +41,22 @@ class PatchPointsField(Field):
         transform (list): list of transformations which will be applied to the points tensor
         multi_files (callable): number of files
 
-    '''
+    """
+
     def __init__(self, file_name, transform=None, unpackbits=False, multi_files=None):
         self.file_name = file_name
         self.transform = transform
         self.unpackbits = unpackbits
         self.multi_files = multi_files
-        
+
     def load(self, model_path, idx, vol):
-        ''' Loads the data point.
+        """ Loads the data point.
 
         Args:
-            model_path (str): path to model
+            model_path (str): mesh_path to model
             idx (int): ID of data point
             vol (dict): precomputed volume info
-        '''
+        """
         if self.multi_files is None:
             file_path = os.path.join(model_path, self.file_name)
         else:
@@ -78,12 +79,12 @@ class PatchPointsField(Field):
         ind_list = []
         for i in range(3):
             ind_list.append((points[:, i] >= vol['query_vol'][0][i])
-                     & (points[:, i] <= vol['query_vol'][1][i]))
+                            & (points[:, i] <= vol['query_vol'][1][i]))
         ind = ind_list[0] & ind_list[1] & ind_list[2]
         data = {None: points[ind],
-                    'occ': occupancies[ind],
-            }
-            
+                'occ': occupancies[ind],
+                }
+
         if self.transform is not None:
             data = self.transform(data)
 
@@ -96,8 +97,9 @@ class PatchPointsField(Field):
 
         return data
 
+
 class PointsField(Field):
-    ''' Point Field.
+    """ Point Field.
 
     It provides the field to load point data. This is used for the points
     randomly sampled in the bounding volume of the 3D shape.
@@ -107,7 +109,8 @@ class PointsField(Field):
         transform (list): list of transformations which will be applied to the points tensor
         multi_files (callable): number of files
 
-    '''
+    """
+
     def __init__(self, file_name, transform=None, unpackbits=False, multi_files=None):
         self.file_name = file_name
         self.transform = transform
@@ -115,13 +118,13 @@ class PointsField(Field):
         self.multi_files = multi_files
 
     def load(self, model_path, idx, category):
-        ''' Loads the data point.
+        """ Loads the data point.
 
         Args:
-            model_path (str): path to model
+            model_path (str): mesh_path to model
             idx (int): ID of data point
             category (int): index of category
-        '''
+        """
         if self.multi_files is None:
             file_path = os.path.join(model_path, self.file_name)
         else:
@@ -150,27 +153,29 @@ class PointsField(Field):
 
         return data
 
+
 class VoxelsField(Field):
-    ''' Voxel field class.
+    """ Voxel field class.
 
     It provides the class used for voxel-based data.
 
     Args:
         file_name (str): file name
         transform (list): list of transformations applied to data points
-    '''
+    """
+
     def __init__(self, file_name, transform=None):
         self.file_name = file_name
         self.transform = transform
 
     def load(self, model_path, idx, category):
-        ''' Loads the data point.
+        """ Loads the data point.
 
         Args:
-            model_path (str): path to model
+            model_path (str): mesh_path to model
             idx (int): ID of data point
             category (int): index of category
-        '''
+        """
         file_path = os.path.join(model_path, self.file_name)
 
         with open(file_path, 'rb') as f:
@@ -183,17 +188,17 @@ class VoxelsField(Field):
         return voxels
 
     def check_complete(self, files):
-        ''' Check if field is complete.
+        """ Check if field is complete.
         
         Args:
             files: files
-        '''
+        """
         complete = (self.file_name in files)
         return complete
 
 
 class PatchPointCloudField(Field):
-    ''' Patch point cloud field.
+    """ Patch point cloud field.
 
     It provides the field used for patched point cloud data. These are the points
     randomly sampled on the mesh and then partitioned.
@@ -202,20 +207,21 @@ class PatchPointCloudField(Field):
         file_name (str): file name
         transform (list): list of transformations applied to data points
         multi_files (callable): number of files
-    '''
+    """
+
     def __init__(self, file_name, transform=None, transform_add_noise=None, multi_files=None):
         self.file_name = file_name
         self.transform = transform
         self.multi_files = multi_files
 
     def load(self, model_path, idx, vol):
-        ''' Loads the data point.
+        """ Loads the data point.
 
         Args:
-            model_path (str): path to model
+            model_path (str): mesh_path to model
             idx (int): ID of data point
             vol (dict): precomputed volume info
-        '''
+        """
         if self.multi_files is None:
             file_path = os.path.join(model_path, self.file_name)
         else:
@@ -229,7 +235,7 @@ class PatchPointCloudField(Field):
 
         # add noise globally
         if self.transform is not None:
-            data = {None: points, 
+            data = {None: points,
                     'normals': normals}
             data = self.transform(data)
             points = data[None]
@@ -238,36 +244,37 @@ class PatchPointCloudField(Field):
         ind_list = []
         for i in range(3):
             ind_list.append((points[:, i] >= vol['input_vol'][0][i])
-                    & (points[:, i] <= vol['input_vol'][1][i]))
-        mask = ind_list[0] & ind_list[1] & ind_list[2]# points inside the input volume
-        mask = ~mask # True means outside the boundary!!
+                            & (points[:, i] <= vol['input_vol'][1][i]))
+        mask = ind_list[0] & ind_list[1] & ind_list[2]  # points inside the input volume
+        mask = ~mask  # True means outside the boundary!!
         data['mask'] = mask
         points[mask] = 0.0
-        
+
         # calculate index of each point w.r.t. defined resolution
         index = {}
-        
+
         for key in vol['plane_type']:
             index[key] = coord2index(points.copy(), vol['input_vol'], reso=vol['reso'], plane=key)
             if key == 'grid':
-                index[key][:, mask] = vol['reso']**3
+                index[key][:, mask] = vol['reso'] ** 3
             else:
-                index[key][:, mask] = vol['reso']**2
+                index[key][:, mask] = vol['reso'] ** 2
         data['ind'] = index
-        
+
         return data
 
     def check_complete(self, files):
-        ''' Check if field is complete.
+        """ Check if field is complete.
         
         Args:
             files: files
-        '''
+        """
         complete = (self.file_name in files)
         return complete
 
+
 class PointCloudField(Field):
-    ''' Point cloud field.
+    """ Point cloud field.
 
     It provides the field used for point cloud data. These are the points
     randomly sampled on the mesh.
@@ -276,20 +283,21 @@ class PointCloudField(Field):
         file_name (str): file name
         transform (list): list of transformations applied to data points
         multi_files (callable): number of files
-    '''
+    """
+
     def __init__(self, file_name, transform=None, multi_files=None):
         self.file_name = file_name
         self.transform = transform
         self.multi_files = multi_files
 
     def load(self, model_path, idx, category):
-        ''' Loads the data point.
+        """ Loads the data point.
 
         Args:
-            model_path (str): path to model
+            model_path (str): mesh_path to model
             idx (int): ID of data point
             category (int): index of category
-        '''
+        """
         if self.multi_files is None:
             file_path = os.path.join(model_path, self.file_name)
         else:
@@ -300,7 +308,7 @@ class PointCloudField(Field):
 
         points = pointcloud_dict['points'].astype(np.float32)
         normals = pointcloud_dict['normals'].astype(np.float32)
-        
+
         data = {
             None: points,
             'normals': normals,
@@ -312,17 +320,17 @@ class PointCloudField(Field):
         return data
 
     def check_complete(self, files):
-        ''' Check if field is complete.
+        """ Check if field is complete.
         
         Args:
             files: files
-        '''
+        """
         complete = (self.file_name in files)
         return complete
 
 
 class PartialPointCloudField(Field):
-    ''' Partial Point cloud field.
+    """ Partial Point cloud field.
 
     It provides the field used for partial point cloud data. These are the points
     randomly sampled on the mesh and a bounding box with random size is applied.
@@ -332,7 +340,8 @@ class PartialPointCloudField(Field):
         transform (list): list of transformations applied to data points
         multi_files (callable): number of files
         part_ratio (float): max ratio for the remaining part
-    '''
+    """
+
     def __init__(self, file_name, transform=None, multi_files=None, part_ratio=0.7):
         self.file_name = file_name
         self.transform = transform
@@ -340,13 +349,13 @@ class PartialPointCloudField(Field):
         self.part_ratio = part_ratio
 
     def load(self, model_path, idx, category):
-        ''' Loads the data point.
+        """ Loads the data point.
 
         Args:
-            model_path (str): path to model
+            model_path (str): mesh_path to model
             idx (int): ID of data point
             category (int): index of category
-        '''
+        """
         if self.multi_files is None:
             file_path = os.path.join(model_path, self.file_name)
         else:
@@ -358,11 +367,10 @@ class PartialPointCloudField(Field):
         points = pointcloud_dict['points'].astype(np.float32)
         normals = pointcloud_dict['normals'].astype(np.float32)
 
-        
         side = np.random.randint(3)
         xb = [points[:, side].min(), points[:, side].max()]
-        length = np.random.uniform(self.part_ratio*(xb[1] - xb[0]), (xb[1] - xb[0]))
-        ind = (points[:, side]-xb[0])<= length
+        length = np.random.uniform(self.part_ratio * (xb[1] - xb[0]), (xb[1] - xb[0]))
+        ind = (points[:, side] - xb[0]) <= length
         data = {
             None: points[ind],
             'normals': normals[ind],
@@ -374,10 +382,10 @@ class PartialPointCloudField(Field):
         return data
 
     def check_complete(self, files):
-        ''' Check if field is complete.
+        """ Check if field is complete.
         
         Args:
             files: files
-        '''
+        """
         complete = (self.file_name in files)
         return complete

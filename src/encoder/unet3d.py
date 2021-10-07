@@ -3,10 +3,12 @@ Code from the 3D UNet implementation:
 https://github.com/wolny/pytorch-3dunet/
 '''
 import importlib
+from functools import partial
+
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from functools import partial
+
 
 def number_of_features_per_level(init_channel_number, num_levels):
     return [init_channel_number * 2 ** k for k in range(num_levels)]
@@ -107,12 +109,12 @@ class DoubleConv(nn.Sequential):
     This can be changed however by providing the 'order' argument, e.g. in order
     to change to Conv3d+BatchNorm3d+ELU use order='cbe'.
     Use padded convolutions to make sure that the output (H_out, W_out) is the same
-    as (H_in, W_in), so that you don't have to crop in the decoder path.
+    as (H_in, W_in), so that you don't have to crop in the decoder mesh_path.
 
     Args:
         in_channels (int): number of input channels
         out_channels (int): number of output channels
-        encoder (bool): if True we're in the encoder path, otherwise we're in the decoder
+        encoder (bool): if True we're in the encoder mesh_path, otherwise we're in the decoder
         kernel_size (int): size of the convolving kernel
         order (string): determines the order of layers, e.g.
             'cr' -> conv + ReLU
@@ -125,14 +127,14 @@ class DoubleConv(nn.Sequential):
     def __init__(self, in_channels, out_channels, encoder, kernel_size=3, order='crg', num_groups=8):
         super(DoubleConv, self).__init__()
         if encoder:
-            # we're in the encoder path
+            # we're in the encoder mesh_path
             conv1_in_channels = in_channels
             conv1_out_channels = out_channels // 2
             if conv1_out_channels < in_channels:
                 conv1_out_channels = in_channels
             conv2_in_channels, conv2_out_channels = conv1_out_channels, out_channels
         else:
-            # we're in the decoder path, decrease the number of channels in the 1st convolution
+            # we're in the decoder mesh_path, decrease the number of channels in the 1st convolution
             conv1_in_channels, conv1_out_channels = in_channels, out_channels
             conv2_in_channels, conv2_out_channels = out_channels, out_channels
 
@@ -194,10 +196,10 @@ class ExtResNetBlock(nn.Module):
 
 class Encoder(nn.Module):
     """
-    A single module from the encoder path consisting of the optional max
+    A single module from the encoder mesh_path consisting of the optional max
     pooling layer (one may specify the MaxPool kernel_size to be different
     than the standard (2,2,2), e.g. if the volumetric data is anisotropic
-    (make sure to use complementary scale_factor in the decoder path) followed by
+    (make sure to use complementary scale_factor in the decoder mesh_path) followed by
     a DoubleConv module.
     Args:
         in_channels (int): number of input channels
@@ -240,7 +242,7 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
     """
-    A single module for decoder path consisting of the upsampling layer
+    A single module for decoder mesh_path consisting of the upsampling layer
     (either learned ConvTranspose3d or nearest neighbor interpolation) followed by a basic module (DoubleConv or ExtResNetBlock).
     Args:
         in_channels (int): number of input channels
@@ -358,6 +360,7 @@ class FinalConv(nn.Sequential):
         final_conv = nn.Conv3d(in_channels, out_channels, 1)
         self.add_module('final_conv', final_conv)
 
+
 class Abstract3DUNet(nn.Module):
     """
     Base class for standard and residual UNet.
@@ -382,7 +385,7 @@ class Abstract3DUNet(nn.Module):
         f_maps (int, tuple): if int: number of feature maps in the first conv layer of the encoder (default: 64);
             if tuple: number of feature maps at each level
         num_groups (int): number of groups for the GroupNorm
-        num_levels (int): number of levels in the encoder/decoder path (applied only if f_maps is an int)
+        num_levels (int): number of levels in the encoder/decoder mesh_path (applied only if f_maps is an int)
         is_segmentation (bool): if True (semantic segmentation problem) Sigmoid/Softmax normalization is applied
             after the final convolution; if False (regression problem) the normalization layer is skipped at the end
         testing (bool): if True (testing mode) the `final_activation` (if present, i.e. `is_segmentation=true`)
@@ -399,7 +402,7 @@ class Abstract3DUNet(nn.Module):
         if isinstance(f_maps, int):
             f_maps = number_of_features_per_level(f_maps, num_levels=num_levels)
 
-        # create encoder path consisting of Encoder modules. Depth of the encoder is equal to `len(f_maps)`
+        # create encoder mesh_path consisting of Encoder modules. Depth of the encoder is equal to `len(f_maps)`
         encoders = []
         for i, out_feature_num in enumerate(f_maps):
             if i == 0:
@@ -414,7 +417,7 @@ class Abstract3DUNet(nn.Module):
 
         self.encoders = nn.ModuleList(encoders)
 
-        # create decoder path consisting of the Decoder modules. The length of the decoder is equal to `len(f_maps) - 1`
+        # create decoder mesh_path consisting of the Decoder modules. The length of the decoder is equal to `len(f_maps) - 1`
         decoders = []
         reversed_f_maps = list(reversed(f_maps))
         for i in range(len(reversed_f_maps) - 1):
@@ -533,13 +536,13 @@ if __name__ == "__main__":
     print(model)
 
     reso = 42
-    
+
     import numpy as np
     import torch
+
     x = np.zeros((1, 1, reso, reso, reso))
-    x[:,:, int(reso/2-1), int(reso/2-1), int(reso/2-1)] = np.nan
+    x[:, :, int(reso / 2 - 1), int(reso / 2 - 1), int(reso / 2 - 1)] = np.nan
     x = torch.FloatTensor(x)
 
     out = model(x)
-    print('%f'%(torch.sum(torch.isnan(out)).detach().cpu().numpy()/(reso*reso*reso)))
-    
+    print('%f' % (torch.sum(torch.isnan(out)).detach().cpu().numpy() / (reso * reso * reso)))

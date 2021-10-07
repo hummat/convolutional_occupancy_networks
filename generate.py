@@ -1,17 +1,17 @@
-import torch
+import argparse
 import os
 import shutil
-import argparse
-from tqdm import tqdm
 import time
 from collections import defaultdict
+
 import pandas as pd
+import torch
+from tqdm import tqdm
+
 from src import config
 from src.checkpoints import CheckpointIO
 from src.utils.io import export_pointcloud
-from src.utils.visualize import visualize_data
 from src.utils.voxels import VoxelGrid
-
 
 parser = argparse.ArgumentParser(
     description='Extract meshes from occupancy process.'
@@ -58,7 +58,6 @@ if generate_pointcloud and not hasattr(generator, 'generate_pointcloud'):
     generate_pointcloud = False
     print('Warning: generator does not support pointcloud generation.')
 
-
 # Loader
 test_loader = torch.utils.data.DataLoader(
     dataset, batch_size=1, num_workers=0, shuffle=False)
@@ -86,7 +85,7 @@ for it, data in enumerate(tqdm(test_loader)):
         model_dict = dataset.get_model_dict(idx)
     except AttributeError:
         model_dict = {'model': str(idx), 'category': 'n/a'}
-    
+
     modelname = model_dict['model']
     category_id = model_dict.get('category', 'n/a')
 
@@ -118,7 +117,7 @@ for it, data in enumerate(tqdm(test_loader)):
 
     if not os.path.exists(in_dir):
         os.makedirs(in_dir)
-    
+
     # Timing dict
     time_dict = {
         'idx': idx,
@@ -134,7 +133,7 @@ for it, data in enumerate(tqdm(test_loader)):
     # Also copy ground truth
     if cfg['generation']['copy_groundtruth']:
         modelpath = os.path.join(
-            dataset.dataset_folder, category_id, modelname, 
+            dataset.dataset_folder, category_id, modelname,
             cfg['data']['watertight_file'])
         out_file_dict['gt'] = modelpath
 
@@ -177,7 +176,7 @@ for it, data in enumerate(tqdm(test_loader)):
             voxel_mesh = VoxelGrid(inputs).to_mesh()
             voxel_mesh.export(inputs_path)
             out_file_dict['in'] = inputs_path
-        elif input_type ==  'pointcloud_crop':
+        elif input_type == 'pointcloud_crop':
             inputs_path = os.path.join(in_dir, '%s.ply' % modelname)
             inputs = data['inputs'].squeeze(0).cpu().numpy()
             export_pointcloud(inputs, inputs_path, False)

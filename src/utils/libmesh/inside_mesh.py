@@ -1,4 +1,5 @@
 import numpy as np
+
 from .triangle_hash import TriangleHash as _TriangleHash
 
 
@@ -63,7 +64,7 @@ class MeshIntersector:
 
         nintersect0 = np.bincount(points_indices_0, minlength=points.shape[0])
         nintersect1 = np.bincount(points_indices_1, minlength=points.shape[0])
-        
+
         # Check if point contained in mesh
         contains1 = (np.mod(nintersect0, 2) == 1)
         contains2 = (np.mod(nintersect1, 2) == 1)
@@ -91,7 +92,7 @@ class MeshIntersector:
         abs_n_2 = np.abs(n_2)
 
         mask = (abs_n_2 != 0)
-    
+
         depth_intersect = np.full(points.shape[0], np.nan)
         depth_intersect[mask] = \
             t1_2[mask] * abs_n_2[mask] + alpha[mask] * s_n_2[mask]
@@ -133,7 +134,7 @@ class TriangleIntersector2d:
         y = points - triangles[:, 2]
 
         detA = A[:, 0, 0] * A[:, 1, 1] - A[:, 0, 1] * A[:, 1, 0]
-        
+
         mask = (np.abs(detA) != 0.)
         A = A[mask]
         y = y[mask]
@@ -147,8 +148,7 @@ class TriangleIntersector2d:
 
         sum_uv = u + v
         contains[mask] = (
-            (0 < u) & (u < abs_detA) & (0 < v) & (v < abs_detA)
-            & (0 < sum_uv) & (sum_uv < abs_detA)
+                (0 < u) & (u < abs_detA) & (0 < v) & (v < abs_detA)
+                & (0 < sum_uv) & (sum_uv < abs_detA)
         )
         return contains
-

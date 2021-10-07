@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from src.layers import ResnetBlockFC
 from torch_scatter import scatter_mean, scatter_max
+
 from src.common import coordinate2index, normalize_coordinate, normalize_3d_coordinate, map2local
 from src.encoder.unet import UNet
 from src.encoder.unet3d import UNet3D
+from src.layers import ResnetBlockFC
 
 
 class LocalPoolPointnet(nn.Module):
@@ -28,15 +28,15 @@ class LocalPoolPointnet(nn.Module):
         n_blocks (int): number of blocks ResNetBlockFC layers
     '''
 
-    def __init__(self, c_dim=128, dim=3, hidden_dim=128, scatter_type='max', 
-                 unet=False, unet_kwargs=None, unet3d=False, unet3d_kwargs=None, 
+    def __init__(self, c_dim=128, dim=3, hidden_dim=128, scatter_type='max',
+                 unet=False, unet_kwargs=None, unet3d=False, unet3d_kwargs=None,
                  plane_resolution=None, grid_resolution=None, plane_type='xz', padding=0.1, n_blocks=5):
         super().__init__()
         self.c_dim = c_dim
 
-        self.fc_pos = nn.Linear(dim, 2*hidden_dim)
+        self.fc_pos = nn.Linear(dim, 2 * hidden_dim)
         self.blocks = nn.ModuleList([
-            ResnetBlockFC(2*hidden_dim, hidden_dim) for i in range(n_blocks)
+            ResnetBlockFC(2 * hidden_dim, hidden_dim) for i in range(n_blocks)
         ])
         self.fc_c = nn.Linear(hidden_dim, c_dim)
 
@@ -65,17 +65,17 @@ class LocalPoolPointnet(nn.Module):
         else:
             raise ValueError('incorrect scatter type')
 
-
     def generate_plane_features(self, p, c, plane='xz'):
         # acquire indices of features in plane
-        xy = normalize_coordinate(p.clone(), plane=plane, padding=self.padding) # normalize to the range of (0, 1)
+        xy = normalize_coordinate(p.clone(), plane=plane, padding=self.padding)  # normalize to the range of (0, 1)
         index = coordinate2index(xy, self.reso_plane)
 
         # scatter plane features from points
-        fea_plane = c.new_zeros(p.size(0), self.c_dim, self.reso_plane**2)
-        c = c.permute(0, 2, 1) # B x 512 x T
-        fea_plane = scatter_mean(c, index, out=fea_plane) # B x 512 x reso^2
-        fea_plane = fea_plane.reshape(p.size(0), self.c_dim, self.reso_plane, self.reso_plane) # sparce matrix (B x 512 x reso x reso)
+        fea_plane = c.new_zeros(p.size(0), self.c_dim, self.reso_plane ** 2)
+        c = c.permute(0, 2, 1)  # B x 512 x T
+        fea_plane = scatter_mean(c, index, out=fea_plane)  # B x 512 x reso^2
+        fea_plane = fea_plane.reshape(p.size(0), self.c_dim, self.reso_plane,
+                                      self.reso_plane)  # sparce matrix (B x 512 x reso x reso)
 
         # process the plane features with UNet
         if self.unet is not None:
@@ -87,10 +87,11 @@ class LocalPoolPointnet(nn.Module):
         p_nor = normalize_3d_coordinate(p.clone(), padding=self.padding)
         index = coordinate2index(p_nor, self.reso_grid, coord_type='3d')
         # scatter grid features from points
-        fea_grid = c.new_zeros(p.size(0), self.c_dim, self.reso_grid**3)
+        fea_grid = c.new_zeros(p.size(0), self.c_dim, self.reso_grid ** 3)
         c = c.permute(0, 2, 1)
-        fea_grid = scatter_mean(c, index, out=fea_grid) # B x C x reso^3
-        fea_grid = fea_grid.reshape(p.size(0), self.c_dim, self.reso_grid, self.reso_grid, self.reso_grid) # sparce matrix (B x 512 x reso x reso)
+        fea_grid = scatter_mean(c, index, out=fea_grid)  # B x C x reso^3
+        fea_grid = fea_grid.reshape(p.size(0), self.c_dim, self.reso_grid, self.reso_grid,
+                                    self.reso_grid)  # sparce matrix (B x 512 x reso x reso)
 
         if self.unet3d is not None:
             fea_grid = self.unet3d(fea_grid)
@@ -105,16 +106,15 @@ class LocalPoolPointnet(nn.Module):
         for key in keys:
             # scatter plane features from points
             if key == 'grid':
-                fea = self.scatter(c.permute(0, 2, 1), index[key], dim_size=self.reso_grid**3)
+                fea = self.scatter(c.permute(0, 2, 1), index[key], dim_size=self.reso_grid ** 3)
             else:
-                fea = self.scatter(c.permute(0, 2, 1), index[key], dim_size=self.reso_plane**2)
+                fea = self.scatter(c.permute(0, 2, 1), index[key], dim_size=self.reso_plane ** 2)
             if self.scatter == scatter_max:
                 fea = fea[0]
             # gather feature back to points
             fea = fea.gather(dim=2, index=index[key].expand(-1, fea_dim, -1))
             c_out += fea
         return c_out.permute(0, 2, 1)
-
 
     def forward(self, p):
         batch_size, T, D = p.size()
@@ -134,7 +134,7 @@ class LocalPoolPointnet(nn.Module):
         if 'grid' in self.plane_type:
             coord['grid'] = normalize_3d_coordinate(p.clone(), padding=self.padding)
             index['grid'] = coordinate2index(coord['grid'], self.reso_grid, coord_type='3d')
-        
+
         net = self.fc_pos(p)
 
         net = self.blocks[0](net)
@@ -156,6 +156,7 @@ class LocalPoolPointnet(nn.Module):
             fea['yz'] = self.generate_plane_features(p, c, plane='yz')
 
         return fea
+
 
 class PatchLocalPoolPointnet(nn.Module):
     ''' PointNet-based encoder network with ResNet blocks.
@@ -181,15 +182,15 @@ class PatchLocalPoolPointnet(nn.Module):
         unit_size (float): defined voxel unit size for local system
     '''
 
-    def __init__(self, c_dim=128, dim=3, hidden_dim=128, scatter_type='max', 
-                 unet=False, unet_kwargs=None, unet3d=False, unet3d_kwargs=None, 
-                 plane_resolution=None, grid_resolution=None, plane_type='xz', padding=0.1, n_blocks=5, 
+    def __init__(self, c_dim=128, dim=3, hidden_dim=128, scatter_type='max',
+                 unet=False, unet_kwargs=None, unet3d=False, unet3d_kwargs=None,
+                 plane_resolution=None, grid_resolution=None, plane_type='xz', padding=0.1, n_blocks=5,
                  local_coord=False, pos_encoding='linear', unit_size=0.1):
         super().__init__()
         self.c_dim = c_dim
 
         self.blocks = nn.ModuleList([
-            ResnetBlockFC(2*hidden_dim, hidden_dim) for i in range(n_blocks)
+            ResnetBlockFC(2 * hidden_dim, hidden_dim) for i in range(n_blocks)
         ])
         self.fc_c = nn.Linear(hidden_dim, c_dim)
 
@@ -221,23 +222,23 @@ class PatchLocalPoolPointnet(nn.Module):
             self.map2local = map2local(unit_size, pos_encoding=pos_encoding)
         else:
             self.map2local = None
-        
+
         if pos_encoding == 'sin_cos':
-            self.fc_pos = nn.Linear(60, 2*hidden_dim)
+            self.fc_pos = nn.Linear(60, 2 * hidden_dim)
         else:
-            self.fc_pos = nn.Linear(dim, 2*hidden_dim)
+            self.fc_pos = nn.Linear(dim, 2 * hidden_dim)
 
     def generate_plane_features(self, index, c):
-        c = c.permute(0, 2, 1) 
+        c = c.permute(0, 2, 1)
         # scatter plane features from points
-        if index.max() < self.reso_plane**2:
-            fea_plane = c.new_zeros(c.size(0), self.c_dim, self.reso_plane**2)
-            fea_plane = scatter_mean(c, index, out=fea_plane) # B x c_dim x reso^2
+        if index.max() < self.reso_plane ** 2:
+            fea_plane = c.new_zeros(c.size(0), self.c_dim, self.reso_plane ** 2)
+            fea_plane = scatter_mean(c, index, out=fea_plane)  # B x c_dim x reso^2
         else:
-            fea_plane = scatter_mean(c, index) # B x c_dim x reso^2
-            if fea_plane.shape[-1] > self.reso_plane**2: # deal with outliers
+            fea_plane = scatter_mean(c, index)  # B x c_dim x reso^2
+            if fea_plane.shape[-1] > self.reso_plane ** 2:  # deal with outliers
                 fea_plane = fea_plane[:, :, :-1]
-        
+
         fea_plane = fea_plane.reshape(c.size(0), self.c_dim, self.reso_plane, self.reso_plane)
 
         # process the plane features with UNet
@@ -249,12 +250,12 @@ class PatchLocalPoolPointnet(nn.Module):
     def generate_grid_features(self, index, c):
         # scatter grid features from points        
         c = c.permute(0, 2, 1)
-        if index.max() < self.reso_grid**3:
-            fea_grid = c.new_zeros(c.size(0), self.c_dim, self.reso_grid**3)
-            fea_grid = scatter_mean(c, index, out=fea_grid) # B x c_dim x reso^3
+        if index.max() < self.reso_grid ** 3:
+            fea_grid = c.new_zeros(c.size(0), self.c_dim, self.reso_grid ** 3)
+            fea_grid = scatter_mean(c, index, out=fea_grid)  # B x c_dim x reso^3
         else:
-            fea_grid = scatter_mean(c, index) # B x c_dim x reso^3
-            if fea_grid.shape[-1] > self.reso_grid**3: # deal with outliers
+            fea_grid = scatter_mean(c, index)  # B x c_dim x reso^3
+            if fea_grid.shape[-1] > self.reso_grid ** 3:  # deal with outliers
                 fea_grid = fea_grid[:, :, :-1]
         fea_grid = fea_grid.reshape(c.size(0), self.c_dim, self.reso_grid, self.reso_grid, self.reso_grid)
 
@@ -281,11 +282,10 @@ class PatchLocalPoolPointnet(nn.Module):
             c_out += fea
         return c_out.permute(0, 2, 1)
 
-
     def forward(self, inputs):
         p = inputs['points']
         index = inputs['index']
-    
+
         batch_size, T, D = p.size()
 
         if self.map2local:

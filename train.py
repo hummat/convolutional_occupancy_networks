@@ -1,16 +1,21 @@
+import argparse
+import datetime
+import os
+import time
+
+import matplotlib;
+import numpy as np
 import torch
 import torch.optim as optim
 from tensorboardX import SummaryWriter
-import numpy as np
-import os
-import argparse
-import time, datetime
-import matplotlib; matplotlib.use('Agg')
+from tqdm import tqdm
+
+matplotlib.use('Agg')
 from src import config, data
 from src.checkpoints import CheckpointIO
+from src.eval import MeshEvaluator
 from collections import defaultdict
 import shutil
-
 
 # Arguments
 parser = argparse.ArgumentParser(
@@ -33,6 +38,8 @@ t0 = time.time()
 out_dir = cfg['training']['out_dir']
 batch_size = cfg['training']['batch_size']
 backup_every = cfg['training']['backup_every']
+# weights = os.path.join("/home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks", cfg['training']['pre_trained_weights'])
+weights = cfg['training']['pre_trained_weights']
 vis_n_outputs = cfg['generation']['vis_n_outputs']
 exit_after = args.exit_after
 
@@ -55,21 +62,26 @@ shutil.copyfile(args.config, os.path.join(out_dir, 'config.yaml'))
 train_dataset = config.get_dataset('train', cfg)
 val_dataset = config.get_dataset('val', cfg, return_idx=True)
 
-train_loader = torch.utils.data.DataLoader(
-    train_dataset, batch_size=batch_size, num_workers=cfg['training']['n_workers'], shuffle=True,
-    collate_fn=data.collate_remove_none,
-    worker_init_fn=data.worker_init_fn)
+train_loader = torch.utils.data.DataLoader(train_dataset,
+                                           batch_size=batch_size,
+                                           num_workers=cfg['training']['n_workers'],
+                                           shuffle=True,
+                                           collate_fn=data.collate_remove_none,
+                                           worker_init_fn=data.worker_init_fn)
 
-val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=1, num_workers=cfg['training']['n_workers_val'], shuffle=False,
-    collate_fn=data.collate_remove_none,
-    worker_init_fn=data.worker_init_fn)
+val_loader = torch.utils.data.DataLoader(val_dataset,
+                                         batch_size=1,
+                                         num_workers=cfg['training']['n_workers_val'],
+                                         shuffle=False,
+                                         collate_fn=data.collate_remove_none,
+                                         worker_init_fn=data.worker_init_fn)
 
 # For visualizations
-vis_loader = torch.utils.data.DataLoader(
-    val_dataset, batch_size=1, shuffle=False,
-    collate_fn=data.collate_remove_none,
-    worker_init_fn=data.worker_init_fn)
+vis_loader = torch.utils.data.DataLoader(val_dataset,
+                                         batch_size=1,
+                                         shuffle=False,
+                                         collate_fn=data.collate_remove_none,
+                                         worker_init_fn=data.worker_init_fn)
 model_counter = defaultdict(int)
 data_vis_list = []
 
@@ -97,25 +109,26 @@ model = config.get_model(cfg, device=device, dataset=train_dataset)
 # Generator
 generator = config.get_generator(model, cfg, device=device)
 
-# Intialize training
+# Initialize training
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 # optimizer = optim.SGD(model.parameters(), lr=1e-4, momentum=0.9)
 trainer = config.get_trainer(model, optimizer, cfg, device=device)
 
 checkpoint_io = CheckpointIO(out_dir, model=model, optimizer=optimizer)
+if weights is not None:
+    print("Loading pre-trained weights from ", weights)
+    checkpoint_io.load(weights)
 try:
     load_dict = checkpoint_io.load('model.pt')
 except FileExistsError:
     load_dict = dict()
 epoch_it = load_dict.get('epoch_it', 0)
 it = load_dict.get('it', 0)
-metric_val_best = load_dict.get(
-    'loss_val_best', -model_selection_sign * np.inf)
+metric_val_best = load_dict.get('loss_val_best', -model_selection_sign * np.inf)
 
 if metric_val_best == np.inf or metric_val_best == -np.inf:
     metric_val_best = -model_selection_sign * np.inf
-print('Current best validation metric (%s): %.8f'
-      % (model_selection_metric, metric_val_best))
+print('Current best validation metric (%s): %.8f' % (model_selection_metric, metric_val_best))
 logger = SummaryWriter(os.path.join(out_dir, 'logs'))
 
 # Shorthands
@@ -128,7 +141,7 @@ visualize_every = cfg['training']['visualize_every']
 nparameters = sum(p.numel() for p in model.parameters())
 print('Total number of parameters: %d' % nparameters)
 
-print('output path: ', cfg['training']['out_dir'])
+print('output mesh_path: ', cfg['training']['out_dir'])
 
 while True:
     epoch_it += 1
@@ -142,14 +155,14 @@ while True:
         if print_every > 0 and (it % print_every) == 0:
             t = datetime.datetime.now()
             print('[Epoch %02d] it=%03d, loss=%.4f, time: %.2fs, %02d:%02d'
-                     % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
+                  % (epoch_it, it, loss, time.time() - t0, t.hour, t.minute))
 
         # Visualize output
-        if visualize_every > 0 and (it % visualize_every) == 0:
+        if visualize_every > 0 and (it % visualize_every) == 0 or (epoch_it == 1 and it == 1):
             print('Visualizing')
             for data_vis in data_vis_list:
                 if cfg['generation']['sliding_window']:
-                    out = generator.generate_mesh_sliding(data_vis['data'])    
+                    out = generator.generate_mesh_sliding(data_vis['data'])
                 else:
                     out = generator.generate_mesh(data_vis['data'])
                 # Get statistics
@@ -158,26 +171,38 @@ while True:
                 except TypeError:
                     mesh, stats_dict = out, {}
 
-                mesh.export(os.path.join(out_dir, 'vis', '{}_{}_{}.off'.format(it, data_vis['category'], data_vis['it'])))
-
+                mesh.export(
+                    os.path.join(out_dir, 'vis', '{}_{}_{}.off'.format(it, data_vis['category'], data_vis['it'])))
 
         # Save checkpoint
-        if (checkpoint_every > 0 and (it % checkpoint_every) == 0):
+        if checkpoint_every > 0 and (it % checkpoint_every) == 0:
             print('Saving checkpoint')
-            checkpoint_io.save('model.pt', epoch_it=epoch_it, it=it,
-                               loss_val_best=metric_val_best)
+            checkpoint_io.save('model.pt', epoch_it=epoch_it, it=it, loss_val_best=metric_val_best)
 
         # Backup if necessary
-        if (backup_every > 0 and (it % backup_every) == 0):
+        if backup_every > 0 and (it % backup_every) == 0:
             print('Backup checkpoint')
-            checkpoint_io.save('model_%d.pt' % it, epoch_it=epoch_it, it=it,
-                               loss_val_best=metric_val_best)
+            checkpoint_io.save('model_%d.pt' % it, epoch_it=epoch_it, it=it, loss_val_best=metric_val_best)
+
         # Run validation
-        if validate_every > 0 and (it % validate_every) == 0:
+        if validate_every > 0 and (it % validate_every) == 0 or (epoch_it == 1 and it == 1):
             eval_dict = trainer.evaluate(val_loader)
+
+            if "f-score" in model_selection_metric:
+                evaluator = MeshEvaluator()
+                result_list = list()
+                for data in tqdm(val_loader, desc="Computing F1-Score"):
+                    mesh = generator.generate_mesh(data, return_stats=False)
+                    result = evaluator.eval_mesh(mesh=mesh,
+                                                 pointcloud_tgt=data['pointcloud'].squeeze(0).numpy(),
+                                                 normals_tgt=data['pointcloud.normals'].squeeze(0).numpy(),
+                                                 points_iou=data['points_iou'].squeeze(0).numpy(),
+                                                 occ_tgt=data['points_iou.occ'].squeeze(0).numpy())
+                    result_list.append(result[model_selection_metric])
+                eval_dict[model_selection_metric] = np.mean(result_list)
+
             metric_val = eval_dict[model_selection_metric]
-            print('Validation metric (%s): %.4f'
-                  % (model_selection_metric, metric_val))
+            print('Validation metric (%s): %.4f' % (model_selection_metric, metric_val))
 
             for k, v in eval_dict.items():
                 logger.add_scalar('val/%s' % k, v, it)
@@ -185,12 +210,10 @@ while True:
             if model_selection_sign * (metric_val - metric_val_best) > 0:
                 metric_val_best = metric_val
                 print('New best model (loss %.4f)' % metric_val_best)
-                checkpoint_io.save('model_best.pt', epoch_it=epoch_it, it=it,
-                                   loss_val_best=metric_val_best)
+                checkpoint_io.save('model_best.pt', epoch_it=epoch_it, it=it, loss_val_best=metric_val_best)
 
         # Exit if necessary
-        if exit_after > 0 and (time.time() - t0) >= exit_after:
+        if 0 < exit_after <= (time.time() - t0):
             print('Time limit reached. Exiting.')
-            checkpoint_io.save('model.pt', epoch_it=epoch_it, it=it,
-                               loss_val_best=metric_val_best)
+            checkpoint_io.save('model.pt', epoch_it=epoch_it, it=it, loss_val_best=metric_val_best)
             exit(3)

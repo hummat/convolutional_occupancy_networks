@@ -1,25 +1,50 @@
 import numpy as np
+from scipy.spatial.transform import Rotation as R
+
+
+class RotatePointcloud(object):
+    """ Point cloud rotation transformation class.
+
+    It randomly rotates the point cloud.
+    """
+
+    def __call__(self, data):
+        """ Calls the transformation.
+
+        Args:
+            data (dictionary): data dictionary
+        """
+        data_out = data.copy()
+        points = data[None]
+        normals = data['normals']
+
+        rot = R.random().as_matrix()
+        data_out[None] = points @ rot
+        data_out['normals'] = normals @ rot
+        data_out['rot'] = rot
+
+        return data_out
 
 
 # Transforms
 class PointcloudNoise(object):
-    ''' Point cloud noise transformation class.
+    """ Point cloud noise transformation class.
 
     It adds noise to point cloud data.
 
     Args:
         stddev (int): standard deviation
-    '''
+    """
 
     def __init__(self, stddev):
         self.stddev = stddev
 
     def __call__(self, data):
-        ''' Calls the transformation.
+        """ Calls the transformation.
 
         Args:
             data (dictionary): data dictionary
-        '''
+        """
         data_out = data.copy()
         points = data[None]
         noise = self.stddev * np.random.randn(*points.shape)
@@ -27,23 +52,25 @@ class PointcloudNoise(object):
         data_out[None] = points + noise
         return data_out
 
+
 class SubsamplePointcloud(object):
-    ''' Point cloud subsampling transformation class.
+    """ Point cloud subsampling transformation class.
 
     It subsamples the point cloud data.
 
     Args:
         N (int): number of points to be subsampled
-    '''
+    """
+
     def __init__(self, N):
         self.N = N
 
     def __call__(self, data):
-        ''' Calls the transformation.
+        """ Calls the transformation.
 
         Args:
             data (dict): data dictionary
-        '''
+        """
         data_out = data.copy()
         points = data[None]
         normals = data['normals']
@@ -56,22 +83,23 @@ class SubsamplePointcloud(object):
 
 
 class SubsamplePoints(object):
-    ''' Points subsampling transformation class.
+    """ Points subsampling transformation class.
 
     It subsamples the points data.
 
     Args:
         N (int): number of points to be subsampled
-    '''
+    """
+
     def __init__(self, N):
         self.N = N
 
     def __call__(self, data):
-        ''' Calls the transformation.
+        """ Calls the transformation.
 
         Args:
             data (dictionary): data dictionary
-        '''
+        """
         points = data[None]
         occ = data['occ']
 
@@ -80,7 +108,7 @@ class SubsamplePoints(object):
             idx = np.random.randint(points.shape[0], size=self.N)
             data_out.update({
                 None: points[idx, :],
-                'occ':  occ[idx],
+                'occ': occ[idx],
             })
         else:
             Nt_out, Nt_in = self.N
