@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import trimesh
 
 from src.common import coord2index, normalize_coord
 from src.data.core import Field
@@ -81,9 +82,7 @@ class PatchPointsField(Field):
             ind_list.append((points[:, i] >= vol['query_vol'][0][i])
                             & (points[:, i] <= vol['query_vol'][1][i]))
         ind = ind_list[0] & ind_list[1] & ind_list[2]
-        data = {None: points[ind],
-                'occ': occupancies[ind],
-                }
+        data = {None: points[ind], 'occ': occupancies[ind]}
 
         if self.transform is not None:
             data = self.transform(data)
@@ -111,11 +110,12 @@ class PointsField(Field):
 
     """
 
-    def __init__(self, file_name, transform=None, unpackbits=False, multi_files=None):
+    def __init__(self, file_name, transform=None, unpackbits=False, multi_files=None, occ_from_sdf=None):
         self.file_name = file_name
         self.transform = transform
         self.unpackbits = unpackbits
         self.multi_files = multi_files
+        self.occ_from_sdf = occ_from_sdf
 
     def load(self, model_path, idx, category):
         """ Loads the data point.
@@ -131,17 +131,28 @@ class PointsField(Field):
             num = np.random.randint(self.multi_files)
             file_path = os.path.join(model_path, self.file_name, '%s_%02d.npz' % (self.file_name, num))
 
-        points_dict = np.load(file_path)
-        points = points_dict['points']
+        points_data = np.load(file_path)
+        if isinstance(points_data, np.lib.npyio.NpzFile):
+            points = points_data['points']
+        else:
+            points = points_data[:, :3]
         # Break symmetry if given in float16:
         if points.dtype == np.float16:
             points = points.astype(np.float32)
             points += 1e-4 * np.random.randn(*points.shape)
 
-        occupancies = points_dict['occupancies']
-        if self.unpackbits:
-            occupancies = np.unpackbits(occupancies)[:points.shape[0]]
-        occupancies = occupancies.astype(np.float32)
+        if isinstance(points_data, np.lib.npyio.NpzFile):
+            occupancies = points_data['occupancies']
+            if self.unpackbits:
+                occupancies = np.unpackbits(occupancies)[:points.shape[0]]
+            occupancies = occupancies.astype(np.float32)
+        elif self.occ_from_sdf:
+            occupancies = (points_data[:, 3] <= 0).astype(np.float32)
+        else:
+            occupancies = points_data[:, 3]
+            if occupancies.dtype == np.float16:
+                occupancies = occupancies.astype(np.float32)
+                occupancies += 1e-4 * np.random.randn(*occupancies.shape)
 
         data = {
             None: points,
@@ -168,23 +179,27 @@ class VoxelsField(Field):
         self.file_name = file_name
         self.transform = transform
 
-    def load(self, model_path, idx, category):
+    def load(self, model_path, idx, category, use_trimesh: bool = False):
         """ Loads the data point.
 
         Args:
             model_path (str): mesh_path to model
             idx (int): ID of data point
             category (int): index of category
+            use_trimesh (bool): Whether to use Trimesh to load the binvox file
         """
         file_path = os.path.join(model_path, self.file_name)
 
         with open(file_path, 'rb') as f:
-            voxels = binvox_rw.read_as_3d_array(f)
-        voxels = voxels.data.astype(np.float32)
+            if use_trimesh:
+                voxels = trimesh.exchange.binvox.load_binvox(f)
+            else:
+                voxels = binvox_rw.read_as_3d_array(f)
 
-        if self.transform is not None:
-            voxels = self.transform(voxels)
-
+        if not use_trimesh:
+            voxels = voxels.data.astype(np.float32)
+            if self.transform is not None:
+                voxels = self.transform(voxels)
         return voxels
 
     def check_complete(self, files):
@@ -306,8 +321,12 @@ class PointCloudField(Field):
 
         pointcloud_dict = np.load(file_path)
 
-        points = pointcloud_dict['points'].astype(np.float32)
-        normals = pointcloud_dict['normals'].astype(np.float32)
+        if isinstance(pointcloud_dict, np.lib.npyio.NpzFile):
+            points = pointcloud_dict['points'].astype(np.float32)
+            normals = pointcloud_dict['normals'].astype(np.float32)
+        else:
+            points = pointcloud_dict.astype(np.float32)
+            normals = np.zeros_like(points).astype(np.float32)
 
         data = {
             None: points,
@@ -337,16 +356,16 @@ class PartialPointCloudField(Field):
 
     Args:
         file_name (str): file name
-        transform (list): list of transformations applied to data points
+        transform (torch.): list of transformations applied to data points
         multi_files (callable): number of files
         part_ratio (float): max ratio for the remaining part
     """
-
-    def __init__(self, file_name, transform=None, multi_files=None, part_ratio=0.7):
+    def __init__(self, file_name, transform=None, multi_files=None, part_ratio=0.7, plane: bool = False):
         self.file_name = file_name
         self.transform = transform
         self.multi_files = multi_files
         self.part_ratio = part_ratio
+        self.plane = plane
 
     def load(self, model_path, idx, category):
         """ Loads the data point.
@@ -364,13 +383,23 @@ class PartialPointCloudField(Field):
 
         pointcloud_dict = np.load(file_path)
 
-        points = pointcloud_dict['points'].astype(np.float32)
-        normals = pointcloud_dict['normals'].astype(np.float32)
+        if isinstance(pointcloud_dict, np.lib.npyio.NpzFile):
+            points = pointcloud_dict['points'].astype(np.float32)
+            normals = pointcloud_dict['normals'].astype(np.float32)
+        else:
+            points = pointcloud_dict.astype(np.float32)
+            normals = np.zeros_like(points).astype(np.float32)
 
-        side = np.random.randint(3)
-        xb = [points[:, side].min(), points[:, side].max()]
-        length = np.random.uniform(self.part_ratio * (xb[1] - xb[0]), (xb[1] - xb[0]))
-        ind = (points[:, side] - xb[0]) <= length
+        if self.plane:
+            axes = np.random.choice([0, 1, 2], size=np.random.randint(1, 3))
+            if len(axes) == 1:
+                pass
+        else:
+            side = np.random.randint(3)
+            xb = [points[:, side].min(), points[:, side].max()]
+            length = np.random.uniform(self.part_ratio * (xb[1] - xb[0]), (xb[1] - xb[0]))
+            ind = (points[:, side] - xb[0]) <= length
+
         data = {
             None: points[ind],
             'normals': normals[ind],

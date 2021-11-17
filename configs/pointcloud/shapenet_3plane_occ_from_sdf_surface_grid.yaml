@@ -1,0 +1,53 @@
+method: conv_onet
+data:
+  input_type: pointcloud
+  classes: ["02876657", "02880940", "02946921", "03797390"]
+  path: /home/matthias/Data2/datasets/shapenet/matthias/disn/extra
+  pointcloud_n: 3000
+  pointcloud_noise: 0.005
+  points_subsample: 2048
+  points_file: surface_grid.npy
+  points_iou_file: surface_grid.npy
+  pointcloud_file: surface.npy
+  pointcloud_chamfer_file: surface.npy
+  voxels_file: 'model.binvox'
+  occ_from_sdf: true
+model:
+  encoder: pointnet_local_pool
+  encoder_kwargs:
+    hidden_dim: 32
+    plane_type: ['xz', 'xy', 'yz']
+    plane_resolution: 64
+    unet: true
+    unet_kwargs:
+      depth: 4
+      merge_mode: concat
+      start_filts: 32
+  decoder: simple_local
+  decoder_kwargs:
+    sample_mode: bilinear # bilinear / nearest
+    hidden_size: 32
+  c_dim: 32
+training:
+  out_dir: out/pointcloud/shapenet_3plane_occ_from_sdf_surface_grid
+  batch_size: 32
+  model_selection_metric: iou
+  model_selection_mode: maximize
+  print_every: 100
+  visualize_every: 10000
+  validate_every: 10000
+  checkpoint_every: 2000
+  backup_every: 10000
+  n_workers: 8
+  n_workers_val: 4
+  max_iter: 20000
+test:
+  threshold: 0.2
+  eval_mesh: true
+  eval_pointcloud: false
+  model_file: model_best.pt
+generation:
+  vis_n_outputs: 2
+  refine: false
+  n_x: 128
+  n_z: 1

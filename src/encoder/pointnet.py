@@ -9,7 +9,7 @@ from src.layers import ResnetBlockFC
 
 
 class LocalPoolPointnet(nn.Module):
-    ''' PointNet-based encoder network with ResNet blocks for each point.
+    """ PointNet-based encoder network with ResNet blocks for each point.
         Number of input points are fixed.
     
     Args:
@@ -26,7 +26,7 @@ class LocalPoolPointnet(nn.Module):
         plane_type (str): feature type, 'xz' - 1-plane, ['xz', 'xy', 'yz'] - 3-plane, ['grid'] - 3D grid volume
         padding (float): conventional padding paramter of ONet for unit cube, so [-0.5, 0.5] -> [-0.55, 0.55]
         n_blocks (int): number of blocks ResNetBlockFC layers
-    '''
+    """
 
     def __init__(self, c_dim=128, dim=3, hidden_dim=128, scatter_type='max',
                  unet=False, unet_kwargs=None, unet3d=False, unet3d_kwargs=None,
@@ -159,7 +159,7 @@ class LocalPoolPointnet(nn.Module):
 
 
 class PatchLocalPoolPointnet(nn.Module):
-    ''' PointNet-based encoder network with ResNet blocks.
+    """ PointNet-based encoder network with ResNet blocks.
         First transform input points to local system based on the given voxel size.
         Support non-fixed number of point cloud, but need to precompute the index
     
@@ -180,7 +180,7 @@ class PatchLocalPoolPointnet(nn.Module):
         local_coord (bool): whether to use local coordinate
         pos_encoding (str): method for the positional encoding, linear|sin_cos
         unit_size (float): defined voxel unit size for local system
-    '''
+    """
 
     def __init__(self, c_dim=128, dim=3, hidden_dim=128, scatter_type='max',
                  unet=False, unet_kwargs=None, unet3d=False, unet3d_kwargs=None,

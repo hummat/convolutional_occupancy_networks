@@ -8,10 +8,13 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from src import config
+from src import config, data
 from src.checkpoints import CheckpointIO
 from src.utils.io import export_pointcloud
 from src.utils.voxels import VoxelGrid
+
+
+data.seed_all_rng(11)
 
 parser = argparse.ArgumentParser(
     description='Extract meshes from occupancy process.'
@@ -59,8 +62,10 @@ if generate_pointcloud and not hasattr(generator, 'generate_pointcloud'):
     print('Warning: generator does not support pointcloud generation.')
 
 # Loader
-test_loader = torch.utils.data.DataLoader(
-    dataset, batch_size=1, num_workers=0, shuffle=False)
+test_loader = torch.utils.data.DataLoader(dataset,
+                                          batch_size=1,
+                                          num_workers=8,
+                                          shuffle=False)
 
 # Statistics
 time_dicts = []
@@ -71,7 +76,7 @@ model.eval()
 # Count how many models already created
 model_counter = defaultdict(int)
 
-for it, data in enumerate(tqdm(test_loader)):
+for it, data in enumerate(tqdm(test_loader, desc="Generating meshes:")):
     # Output folders
     mesh_dir = os.path.join(generation_dir, 'meshes')
     pointcloud_dir = os.path.join(generation_dir, 'pointcloud')

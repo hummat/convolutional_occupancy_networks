@@ -67,8 +67,7 @@ def get_model(cfg, device=None, dataset=None):
         dataset (dataset): dataset
     """
     method = cfg['method']
-    model = method_dict[method].config.get_model(
-        cfg, device=device, dataset=dataset)
+    model = method_dict[method].config.get_model(cfg, device=device, dataset=dataset)
     return model
 
 
@@ -83,8 +82,7 @@ def get_trainer(model, optimizer, cfg, device):
         device (device): pytorch device
     """
     method = cfg['method']
-    trainer = method_dict[method].config.get_trainer(
-        model, optimizer, cfg, device)
+    trainer = method_dict[method].config.get_trainer(model, optimizer, cfg, device)
     return trainer
 
 
@@ -139,11 +137,12 @@ def get_dataset(mode, cfg, return_idx=False):
             fields['idx'] = data.IndexField()
 
         dataset = data.Shapes3dDataset(
-            dataset_folder, fields,
+            dataset_folder,
+            fields,
             split=split,
             categories=categories,
-            cfg=cfg
-        )
+            transform=data.Rotate(visualize=cfg['data']['visualize']) if cfg['data']['rotate'] else None,
+            cfg=cfg)
     else:
         raise ValueError('Invalid dataset "%s"' % cfg['data']['dataset'])
 
@@ -158,42 +157,25 @@ def get_inputs_field(cfg):
     """
     input_type = cfg['data']['input_type']
 
+    transform = [
+        data.SubsamplePointcloud(cfg['data']['pointcloud_n']),
+        data.PointcloudNoise(cfg['data']['pointcloud_noise'])
+    ]
+    transform = transforms.Compose(transform)
+
     if input_type is None:
         inputs_field = None
     elif input_type == 'pointcloud':
-        transform = transforms.Compose([
-            data.SubsamplePointcloud(cfg['data']['pointcloud_n']),
-            data.PointcloudNoise(cfg['data']['pointcloud_noise'])
-        ])
-        inputs_field = data.PointCloudField(
-            cfg['data']['pointcloud_file'], transform,
-            multi_files=cfg['data']['multi_files']
-        )
+        inputs_field = data.PointCloudField(cfg['data']['pointcloud_file'], transform, cfg['data']['multi_files'])
     elif input_type == 'partial_pointcloud':
-        transform = transforms.Compose([
-            data.SubsamplePointcloud(cfg['data']['pointcloud_n']),
-            data.PointcloudNoise(cfg['data']['pointcloud_noise'])
-        ])
-        inputs_field = data.PartialPointCloudField(
-            cfg['data']['pointcloud_file'], transform,
-            multi_files=cfg['data']['multi_files']
-        )
+        inputs_field = data.PartialPointCloudField(cfg['data']['pointcloud_file'],
+                                                   transform,
+                                                   cfg['data']['multi_files'],
+                                                   part_ratio=cfg['data']['part_ratio'])
     elif input_type == 'pointcloud_crop':
-        transform = transforms.Compose([
-            data.SubsamplePointcloud(cfg['data']['pointcloud_n']),
-            data.PointcloudNoise(cfg['data']['pointcloud_noise'])
-        ])
-
-        inputs_field = data.PatchPointCloudField(
-            cfg['data']['pointcloud_file'],
-            transform,
-            multi_files=cfg['data']['multi_files'],
-        )
-
+        inputs_field = data.PatchPointCloudField(cfg['data']['pointcloud_file'], transform, None, cfg['data']['multi_files'])
     elif input_type == 'voxels':
-        inputs_field = data.VoxelsField(
-            cfg['data']['voxels_file']
-        )
+        inputs_field = data.VoxelsField(cfg['data']['voxels_file'])
     elif input_type == 'idx':
         inputs_field = data.IndexField()
     else:

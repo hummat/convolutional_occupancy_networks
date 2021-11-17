@@ -1,8 +1,8 @@
 method: conv_onet
 data:
   input_type: partial_pointcloud
-  classes: [ "02876657" ]
-  path: data/ShapeNet
+  classes: null
+  path: data/ShapeNet/extra
   pointcloud_n: 3000
   pointcloud_noise: 0.005
   points_subsample: 2048
@@ -13,7 +13,7 @@ model:
   encoder: pointnet_local_pool
   encoder_kwargs:
     hidden_dim: 32
-    plane_type: [ "xz", "xy", "yz" ]
+    plane_type: ['xz', 'xy', 'yz']
     plane_resolution: 64
     unet: True
     unet_kwargs:
@@ -26,15 +26,14 @@ model:
     hidden_size: 32
   c_dim: 32
 training:
-  pre_trained_weights: https://s3.eu-central-1.amazonaws.com/avg-projects/convolutional_occupancy_networks/models/pointcloud/shapenet_3plane.pt
-  out_dir: out/pointcloud/partial_shapenet_3plane_bottle
+  out_dir: out/pointcloud/shapenet_3plane_partial
   batch_size: 32
-  model_selection_metric: f-score
+  model_selection_metric: iou
   model_selection_mode: maximize
   print_every: 100
-  visualize_every: 1000
-  validate_every: 1000
-  checkpoint_every: 1000
+  visualize_every: 10000
+  validate_every: 10000
+  checkpoint_every: 2000
   backup_every: 10000
   n_workers: 12
   n_workers_val: 12
@@ -44,8 +43,7 @@ test:
   eval_pointcloud: false
   model_file: model_best.pt
 generation:
-  batch_size: 250000
-  vis_n_outputs: 10
+  vis_n_outputs: 2
   refine: false
   n_x: 128
   n_z: 1

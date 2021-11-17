@@ -1,16 +1,14 @@
-import torch
 import torch.nn as nn
 
 
-# Resnet Blocks
 class ResnetBlockFC(nn.Module):
-    ''' Fully connected ResNet Block class.
+    """ Fully connected ResNet Block class.
 
     Args:
         size_in (int): input dimension
         size_out (int): output dimension
         size_h (int): hidden dimension
-    '''
+    """
 
     def __init__(self, size_in, size_out=None, size_h=None):
         super().__init__()

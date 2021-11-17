@@ -7,7 +7,7 @@ import torch
 from src.utils.libkdtree import KDTree
 
 
-def compute_iou(occ1, occ2):
+def compute_iou(occ1, occ2) -> float:
     """ Computes the Intersection over Union (IoU) value for two sets of
     occupancy values.
 
@@ -35,7 +35,7 @@ def compute_iou(occ1, occ2):
 
     iou = (area_intersect / area_union)
 
-    return iou
+    return iou.item()
 
 
 def chamfer_distance(points1, points2, use_kdtree=True, give_id=False):

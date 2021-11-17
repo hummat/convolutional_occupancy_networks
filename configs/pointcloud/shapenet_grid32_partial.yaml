@@ -2,20 +2,20 @@ method: conv_onet
 data:
   input_type: partial_pointcloud
   classes: [ "02876657" ]
-  path: data/ShapeNet
+  path: data/ShapeNet/extra
   pointcloud_n: 3000
   pointcloud_noise: 0.005
   points_subsample: 2048
   points_file: points.npz
   points_iou_file: points.npz
-  voxels_file: null
+  voxels_file: 'model.binvox'
 model:
   encoder: pointnet_local_pool
   encoder_kwargs:
     hidden_dim: 32
-    plane_type: "grid"
+    plane_type: 'grid'
     grid_resolution: 32
-    unet3d: True
+    unet3d: true
     unet3d_kwargs:
       num_levels: 3
       f_maps: 32
@@ -28,25 +28,24 @@ model:
   c_dim: 32
 training:
   pre_trained_weights: https://s3.eu-central-1.amazonaws.com/avg-projects/convolutional_occupancy_networks/models/pointcloud/shapenet_grid32.pt
-  out_dir: out/pointcloud/partial_shapenet_grid32_bottle
+  out_dir: out/pointcloud/shapenet_grid32_partial
   batch_size: 32
-  model_selection_metric: f-score
+  model_selection_metric: iou
   model_selection_mode: maximize
   print_every: 100
-  visualize_every: 1000
-  validate_every: 1000
-  checkpoint_every: 1000
+  visualize_every: 10000
+  validate_every: 10000
+  checkpoint_every: 2000
   backup_every: 10000
-  n_workers: 12
-  n_workers_val: 12
+  n_workers: 8
+  n_workers_val: 4
 test:
-  threshold: 0.2
+  threshold: 0.5
   eval_mesh: true
   eval_pointcloud: false
   model_file: model_best.pt
 generation:
-  batch_size: 250000
-  vis_n_outputs: 10
+  vis_n_outputs: 2
   refine: false
   n_x: 128
   n_z: 1

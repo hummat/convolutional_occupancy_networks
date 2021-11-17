@@ -1,12 +1,16 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+import trimesh
 
 
-class RotatePointcloud(object):
-    """ Point cloud rotation transformation class.
+class Rotate(object):
+    """ Data rotation transformation class.
 
     It randomly rotates the point cloud.
     """
+    def __init__(self, random: bool = False, visualize: bool = False):
+        self.random = random
+        self.visualize = visualize
 
     def __call__(self, data):
         """ Calls the transformation.
@@ -15,14 +19,42 @@ class RotatePointcloud(object):
             data (dictionary): data dictionary
         """
         data_out = data.copy()
-        points = data[None]
-        normals = data['normals']
 
-        rot = R.random().as_matrix()
-        data_out[None] = points @ rot
-        data_out['normals'] = normals @ rot
+        points = data.get('points')
+        points_iou = data.get('points_iou')
+
+        inputs = data.get('inputs')
+        normals = data.get('inputs.normals')
+
+        pcd = data.get('pointcloud')
+        pcd_normals = data.get('pointcloud.normals')
+
+        voxels = data.get('voxels')
+        voxel_input = data.get('input_type') == 'voxels'
+
+        if self.random:
+            rot = R.random().as_matrix()
+        else:
+            rot = np.random.permutation(np.eye(3)) * np.array([np.random.choice([-1, 1]),
+                                                               np.random.choice([-1, 1]),
+                                                               np.random.choice([-1, 1])])
         data_out['rot'] = rot
+        for k, v in zip(['points', 'points_iou', 'inputs', 'inputs.normals', 'pointcloud', 'pointcloud.normals', 'voxels'],
+                        [points, points_iou, inputs, normals, pcd, pcd_normals, voxels]):
+            if v is not None:
+                if k == 'voxels' or (k == 'inputs' and voxel_input):
+                    trans = np.eye(4)
+                    trans[:3, :3] = rot
+                    if isinstance(v, np.ndarray):
+                        v = trimesh.voxel.VoxelGrid(trimesh.voxel.encoding.DenseEncoding(v.data))
+                    data_out[k] = v.apply_transform(trans).matrix.astype(np.float32)
+                data_out[k] = v @ rot
 
+                if self.visualize and k in ["points", "points_iou", "inputs", "pointcloud", "voxels"]:
+                    if k == 'voxels' or (k == 'inputs' and voxel_input):
+                        trimesh.voxel.VoxelGrid(trimesh.voxel.encoding.DenseEncoding(data_out[k])).show()
+                    else:
+                        trimesh.PointCloud(data_out[k]).show()
         return data_out
 
 

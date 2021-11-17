@@ -1,5 +1,7 @@
 import logging
 import os
+import random
+from datetime import datetime
 
 import numpy as np
 import yaml
@@ -39,8 +41,14 @@ class Shapes3dDataset(data.Dataset):
     """ 3D Shapes dataset class.
     """
 
-    def __init__(self, dataset_folder, fields, split=None,
-                 categories=None, no_except=True, transform=None, cfg=None):
+    def __init__(self,
+                 dataset_folder,
+                 fields,
+                 split=None,
+                 categories=None,
+                 no_except=True,
+                 transform=None,
+                 cfg=None):
         """ Initialization of the the 3D shape dataset.
 
         Args:
@@ -62,8 +70,7 @@ class Shapes3dDataset(data.Dataset):
         # If categories is None, use all subfolders
         if categories is None:
             categories = os.listdir(dataset_folder)
-            categories = [c for c in categories
-                          if os.path.isdir(os.path.join(dataset_folder, c))]
+            categories = [c for c in categories if os.path.isdir(os.path.join(dataset_folder, c))]
 
         # Read metadata file
         metadata_file = os.path.join(dataset_folder, 'metadata.yaml')
@@ -72,11 +79,9 @@ class Shapes3dDataset(data.Dataset):
             with open(metadata_file, 'r') as f:
                 self.metadata = yaml.load(f)
         else:
-            self.metadata = {
-                c: {'id': c, 'name': 'n/a'} for c in categories
-            }
+            self.metadata = {c: {'id': c, 'name': 'n/a'} for c in categories}
 
-            # Set index
+        # Set index
         for c_idx, c in enumerate(categories):
             self.metadata[c]['idx'] = c_idx
 
@@ -143,7 +148,7 @@ class Shapes3dDataset(data.Dataset):
         c_idx = self.metadata[category]['idx']
 
         model_path = os.path.join(self.dataset_folder, category, model)
-        data = {}
+        data = {"model_path": model_path, "uid": model, "input_type": self.cfg['data']['input_type']}
 
         if self.cfg['data']['input_type'] == 'pointcloud_crop':
             info = self.get_vol_info(model_path)
@@ -156,10 +161,7 @@ class Shapes3dDataset(data.Dataset):
                 field_data = field.load(model_path, idx, info)
             except Exception:
                 if self.no_except:
-                    logger.warn(
-                        'Error occured when loading field %s of model %s'
-                        % (field_name, model)
-                    )
+                    logger.warning('Error occurred when loading field %s of model %s' % (field_name, model))
                     return None
                 else:
                     raise
@@ -240,10 +242,8 @@ class Shapes3dDataset(data.Dataset):
         files = os.listdir(model_path)
         for field_name, field in self.fields.items():
             if not field.check_complete(files):
-                logger.warn('Field "%s" is incomplete: %s'
-                            % (field_name, model_path))
+                logger.warning('Field "%s" is incomplete: %s' % (field_name, model_path))
                 return False
-
         return True
 
 
@@ -259,13 +259,39 @@ def collate_remove_none(batch):
     return data.dataloader.default_collate(batch)
 
 
+def seed_all_rng(seed=None):
+    """
+    Set the random seed for the RNG in torch, numpy and python.
+
+    Args:
+        seed (int): if None, will use a strong random seed.
+    """
+    if seed is None:
+        seed = (
+            os.getpid()
+            + int(datetime.now().strftime("%S%f"))
+            + int.from_bytes(os.urandom(2), "big")
+        )
+        logger = logging.getLogger(__name__)
+        logger.info("Using a generated random seed {}".format(seed))
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+
+def worker_init_reset_seed(worker_id):
+    initial_seed = torch.initial_seed() % 2 ** 31
+    seed_all_rng(initial_seed + worker_id)
+
+
 def worker_init_fn(worker_id):
     """ Worker init function to ensure true randomness.
     """
 
     def set_num_threads(nt):
         try:
-            import mkl;
+            import mkl
             mkl.set_num_threads(nt)
         except:
             pass

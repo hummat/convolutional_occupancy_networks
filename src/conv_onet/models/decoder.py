@@ -3,10 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from src.layers import ResnetBlockFC
 from src.common import normalize_coordinate, normalize_3d_coordinate, map2local
+from typing import Any
 
 
 class LocalDecoder(nn.Module):
-    ''' Decoder.
+    """ Decoder.
         Instead of conditioning on global features, on plane/volume local features.
 
     Args:
@@ -16,25 +17,30 @@ class LocalDecoder(nn.Module):
         n_blocks (int): number of blocks ResNetBlockFC layers
         leaky (bool): whether to use leaky ReLUs
         sample_mode (str): sampling feature strategy, bilinear|nearest
-        padding (float): conventional padding paramter of ONet for unit cube, so [-0.5, 0.5] -> [-0.55, 0.55]
-    '''
+        padding (float): conventional padding parameter of ONet for unit cube, so [-0.5, 0.5] -> [-0.55, 0.55]
+    """
 
-    def __init__(self, dim=3, c_dim=128,
-                 hidden_size=256, n_blocks=5, leaky=False, sample_mode='bilinear', padding=0.1):
+    def __init__(self,
+                 dim=3,
+                 c_dim=128,
+                 hidden_size=256,
+                 n_blocks=5,
+                 leaky=False,
+                 sample_mode='bilinear',
+                 padding=0.1,
+                 **kwargs: Any):
         super().__init__()
+        self.kwargs = kwargs
+
         self.c_dim = c_dim
         self.n_blocks = n_blocks
 
         if c_dim != 0:
-            self.fc_c = nn.ModuleList([
-                nn.Linear(c_dim, hidden_size) for i in range(n_blocks)
-            ])
+            self.fc_c = nn.ModuleList([nn.Linear(c_dim, hidden_size) for i in range(n_blocks)])
 
         self.fc_p = nn.Linear(dim, hidden_size)
 
-        self.blocks = nn.ModuleList([
-            ResnetBlockFC(hidden_size) for i in range(n_blocks)
-        ])
+        self.blocks = nn.ModuleList([ResnetBlockFC(hidden_size) for _ in range(n_blocks)])
 
         self.fc_out = nn.Linear(hidden_size, 1)
 
@@ -92,7 +98,7 @@ class LocalDecoder(nn.Module):
 
 
 class PatchLocalDecoder(nn.Module):
-    ''' Decoder adapted for crop training.
+    """ Decoder adapted for crop training.
         Instead of conditioning on global features, on plane/volume local features.
 
     Args:
@@ -107,7 +113,7 @@ class PatchLocalDecoder(nn.Module):
         pos_encoding (str): method for the positional encoding, linear|sin_cos
         padding (float): conventional padding paramter of ONet for unit cube, so [-0.5, 0.5] -> [-0.55, 0.55]
 
-    '''
+    """
 
     def __init__(self, dim=3, c_dim=128,
                  hidden_size=256, leaky=False, n_blocks=5, sample_mode='bilinear', local_coord=False,
@@ -190,7 +196,7 @@ class PatchLocalDecoder(nn.Module):
 
 
 class LocalPointDecoder(nn.Module):
-    ''' Decoder for PointConv Baseline.
+    """ Decoder for PointConv Baseline.
 
     Args:
         dim (int): input dimension
@@ -199,7 +205,7 @@ class LocalPointDecoder(nn.Module):
         leaky (bool): whether to use leaky ReLUs
         n_blocks (int): number of blocks ResNetBlockFC layers
         sample_mode (str): sampling mode  for points
-    '''
+    """
 
     def __init__(self, dim=3, c_dim=128,
                  hidden_size=256, leaky=False, n_blocks=5, sample_mode='gaussian', **kwargs):

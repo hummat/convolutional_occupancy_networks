@@ -1,5 +1,4 @@
 import numpy as np
-
 from .triangle_hash import TriangleHash as _TriangleHash
 
 
@@ -10,7 +9,7 @@ def check_mesh_contains(mesh, points, hash_resolution=512):
 
 
 class MeshIntersector:
-    def __init__(self, mesh, resolution=512):
+    def __init__(self, mesh, resolution=512, verbose=True):
         triangles = mesh.vertices[mesh.faces].astype(np.float64)
         n_tri = triangles.shape[0]
 
@@ -28,6 +27,7 @@ class MeshIntersector:
         triangles2d = triangles[:, :, :2]
         self._tri_intersector2d = TriangleIntersector2d(
             triangles2d, resolution)
+        self.verbose = verbose
 
     def query(self, points):
         # Rescale points
@@ -68,12 +68,13 @@ class MeshIntersector:
         # Check if point contained in mesh
         contains1 = (np.mod(nintersect0, 2) == 1)
         contains2 = (np.mod(nintersect1, 2) == 1)
-        if (contains1 != contains2).any():
+        if (contains1 != contains2).any() and self.verbose:
             print('Warning: contains1 != contains2 for some points.')
         contains[mask] = (contains1 & contains2)
         return contains
 
-    def compute_intersection_depth(self, points, triangles):
+    @staticmethod
+    def compute_intersection_depth(points, triangles):
         t1 = triangles[:, 0, :]
         t2 = triangles[:, 1, :]
         t3 = triangles[:, 2, :]
@@ -127,7 +128,8 @@ class TriangleIntersector2d:
         tri_indices = tri_indices[mask]
         return point_indices, tri_indices
 
-    def check_triangles(self, points, triangles):
+    @staticmethod
+    def check_triangles(points, triangles):
         contains = np.zeros(points.shape[0], dtype=np.bool)
         A = triangles[:, :2] - triangles[:, 2:]
         A = A.transpose([0, 2, 1])

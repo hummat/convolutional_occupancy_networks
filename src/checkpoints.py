@@ -1,5 +1,6 @@
 import os
 import urllib
+from typing import Dict
 
 import torch
 from torch.utils import model_zoo
@@ -50,7 +51,7 @@ class CheckpointIO(object):
         else:
             return self.load_file(filename)
 
-    def load_file(self, filename):
+    def load_file(self, filename: str) -> Dict:
         """Loads a module dictionary from file.
         
         Args:
@@ -81,7 +82,7 @@ class CheckpointIO(object):
         scalars = self.parse_state_dict(state_dict)
         return scalars
 
-    def parse_state_dict(self, state_dict):
+    def parse_state_dict(self, state_dict: str) -> Dict:
         """Parse state_dict of model and return scalars.
         
         Args:

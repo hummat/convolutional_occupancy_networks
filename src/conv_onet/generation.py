@@ -11,6 +11,7 @@ from src.common import make_3d_grid, normalize_coord, add_key, coord2index
 from src.utils import libmcubes
 from src.utils.libmise import MISE
 from src.utils.libsimplify import simplify_mesh
+from skimage.measure import marching_cubes
 
 counter = 0
 
@@ -37,14 +38,22 @@ class Generator3D(object):
         simplify_nfaces (int): number of faces the mesh should be simplified to
     """
 
-    def __init__(self, model, points_batch_size=100000,
-                 threshold=0.5, refinement_step=0, device=None,
-                 resolution0=16, upsampling_steps=3,
-                 with_normals=False, padding=0.1, sample=False,
+    def __init__(self,
+                 model,
+                 points_batch_size=100000,
+                 threshold=0.5,
+                 refinement_step=0,
+                 device=None,
+                 resolution0=16,
+                 upsampling_steps=3,
+                 with_normals=False,
+                 padding=0.1,
+                 sample=False,
                  input_type=None,
                  vol_info=None,
                  vol_bound=None,
-                 simplify_nfaces=None):
+                 simplify_nfaces=None,
+                 use_skimage: bool = False):
         self.model = model.to(device)
         self.points_batch_size = points_batch_size
         self.refinement_step = refinement_step
@@ -57,6 +66,7 @@ class Generator3D(object):
         self.padding = padding
         self.sample = sample
         self.simplify_nfaces = simplify_nfaces
+        self.use_skimage = use_skimage
 
         # for pointcloud_crop
         self.vol_bound = vol_bound
@@ -74,7 +84,7 @@ class Generator3D(object):
         device = self.device
         stats_dict = {}
 
-        inputs = data.get('inputs', torch.empty(1, 0)).to(device)
+        inputs = data.get('inputs', torch.empty(1, 0)).to(device, non_blocking=True)
         kwargs = {}
 
         t0 = time.time()
@@ -105,43 +115,57 @@ class Generator3D(object):
             c (tensor): latent conditioned code c
             stats_dict (dict): stats dictionary
         """
-        threshold = np.log(self.threshold) - np.log(1. - self.threshold)
-
         t0 = time.time()
-        # Compute bounding box size
         box_size = 1 + self.padding
+        nx = self.resolution0
 
-        # Shortcut
-        if self.upsampling_steps == 0:
-            nx = self.resolution0
-            pointsf = box_size * make_3d_grid(
-                (-0.5,) * 3, (0.5,) * 3, (nx,) * 3
-            )
-
-            values = self.eval_points(pointsf, c, **kwargs).cpu().numpy()
-            value_grid = values.reshape(nx, nx, nx)
-        else:
-            mesh_extractor = MISE(
-                self.resolution0, self.upsampling_steps, threshold)
-
-            points = mesh_extractor.query()
-            while points.shape[0] != 0:
-                # Query points
-                pointsf = points / mesh_extractor.resolution
-                # Normalize to bounding box
-                pointsf = box_size * (pointsf - 0.5)
-                pointsf = torch.FloatTensor(pointsf).to(self.device)
-                # Evaluate model and update
-                values = self.eval_points(pointsf, c, **kwargs).cpu().numpy()
-                values = values.astype(np.float64)
-                mesh_extractor.update(points, values)
+        if self.model.decoder.kwargs.get("sdf"):
+            if self.upsampling_steps == 0:
+                pointsf = box_size * make_3d_grid((-0.5,) * 3, (0.5,) * 3, (nx,) * 3)
+                sdf_values = self.eval_points_sdf(pointsf, c, **kwargs).numpy()
+                value_grid = sdf_values.reshape(nx, nx, nx)
+            else:
+                mesh_extractor = MISE(self.resolution0, self.upsampling_steps, self.threshold)
                 points = mesh_extractor.query()
+                while points.shape[0] != 0:
+                    # Query points
+                    pointsf = points / mesh_extractor.resolution
+                    # Normalize to bounding box
+                    pointsf = box_size * (pointsf - 0.5)
+                    pointsf = torch.as_tensor(pointsf).to(self.device, non_blocking=True)
+                    # Evaluate model and update
+                    values = self.eval_points_sdf(pointsf, c, **kwargs).numpy()
+                    values = values.astype(np.float64)
+                    mesh_extractor.update(points, values)
+                    points = mesh_extractor.query()
+                value_grid = mesh_extractor.to_dense()
+        else:
+            if self.upsampling_steps == 0:
+                nx = self.resolution0
+                pointsf = box_size * make_3d_grid((-0.5,) * 3, (0.5,) * 3, (nx,) * 3)
+                values = self.eval_points(pointsf, c, **kwargs).numpy()
+                value_grid = values.reshape(nx, nx, nx)
+            else:
+                # Model predicts occupancy logits
+                threshold = np.log(self.threshold) - np.log(1 - self.threshold) if self.threshold > 0 else 0
+                mesh_extractor = MISE(self.resolution0, self.upsampling_steps, threshold)
+                points = mesh_extractor.query()
+                while points.shape[0] != 0:
+                    # Query points
+                    pointsf = points / mesh_extractor.resolution
+                    # Normalize to bounding box
+                    pointsf = box_size * (pointsf - 0.5)
+                    pointsf = torch.as_tensor(pointsf).to(self.device, non_blocking=True)
+                    # Evaluate model and update
+                    values = self.eval_points(pointsf, c, **kwargs).numpy()
+                    values = values.astype(np.float64)
+                    mesh_extractor.update(points, values)
+                    points = mesh_extractor.query()
 
-            value_grid = mesh_extractor.to_dense()
+                value_grid = mesh_extractor.to_dense()
 
         # Extract mesh
         stats_dict['time (eval points)'] = time.time() - t0
-
         mesh = self.extract_mesh(value_grid, c, stats_dict=stats_dict)
         return mesh
 
@@ -159,7 +183,7 @@ class Generator3D(object):
 
         threshold = np.log(self.threshold) - np.log(1. - self.threshold)
 
-        inputs = data.get('inputs', torch.empty(1, 0)).to(device)
+        inputs = data.get('inputs', torch.empty(1, 0)).to(device, non_blocking=True)
         kwargs = {}
 
         # acquire the boundary for every crops
@@ -188,7 +212,7 @@ class Generator3D(object):
                 t = (bb_max - bb_min) / nx  # inteval
                 pp = np.mgrid[bb_min[0]:bb_max[0]:t[0], bb_min[1]:bb_max[1]:t[1], bb_min[2]:bb_max[2]:t[2]].reshape(3,
                                                                                                                     -1).T
-                pp = torch.from_numpy(pp).to(device)
+                pp = torch.from_numpy(pp).to(device, non_blocking=True)
                 values = self.eval_points(pp, c, vol_bound=vol_bound, **kwargs).detach().cpu().numpy()
                 values = values.reshape(nx, nx, nx)
             else:
@@ -197,7 +221,7 @@ class Generator3D(object):
                 while points.shape[0] != 0:
                     pp = points / mesh_extractor.resolution
                     pp = pp * (bb_max - bb_min) + bb_min
-                    pp = torch.from_numpy(pp).to(self.device)
+                    pp = torch.from_numpy(pp).to(self.device, non_blocking=True)
 
                     values = self.eval_points(pp, c, vol_bound=vol_bound, **kwargs).detach().cpu().numpy()
                     values = values.astype(np.float64)
@@ -312,7 +336,7 @@ class Generator3D(object):
         p_n = {}
         for key in self.vol_bound['fea_type']:
             # projected coordinates normalized to the range of [0, 1]
-            p_n[key] = normalize_coord(pi.clone(), vol_bound['input_vol'], plane=key).unsqueeze(0).to(self.device)
+            p_n[key] = normalize_coord(pi.clone(), vol_bound['input_vol'], plane=key).unsqueeze(0).to(self.device, non_blocking=True)
         pi_in['p_n'] = p_n
 
         # predict occupancy of the current crop
@@ -322,11 +346,21 @@ class Generator3D(object):
 
         return occ_hat
 
+    def eval_points_sdf(self, p, c=None, **kwargs):
+        p_split = torch.split(p, self.points_batch_size)
+        sdf_list = list()
+        for pi in p_split:
+            pi = pi.unsqueeze(0).to(self.device, non_blocking=True)
+            with torch.no_grad():
+                sdf_values = self.model.decode(pi, c, **kwargs)
+            sdf_list.append(sdf_values.squeeze(0).detach().cpu())
+        return torch.cat(sdf_list, dim=0)
+
     def eval_points(self, p, c=None, vol_bound=None, **kwargs):
         """ Evaluates the occupancy values for the points.
 
         Args:
-            p (tensor): points 
+            p (tensor): points
             c (tensor): encoded feature volumes
         """
         p_split = torch.split(p, self.points_batch_size)
@@ -337,18 +371,18 @@ class Generator3D(object):
                     occ_hat = self.predict_crop_occ(pi, c, vol_bound=vol_bound, **kwargs)
                     occ_hats.append(occ_hat)
                 else:  # entire scene
-                    pi_in = pi.unsqueeze(0).to(self.device)
+                    pi_in = pi.unsqueeze(0).to(self.device, non_blocking=True)
                     pi_in = {'p': pi_in}
                     p_n = {}
                     for key in c.keys():
                         # normalized to the range of [0, 1]
-                        p_n[key] = normalize_coord(pi.clone(), self.input_vol, plane=key).unsqueeze(0).to(self.device)
+                        p_n[key] = normalize_coord(pi.clone(), self.input_vol, plane=key).unsqueeze(0).to(self.device, non_blocking=True)
                     pi_in['p_n'] = p_n
                     with torch.no_grad():
                         occ_hat = self.model.decode(pi_in, c, **kwargs).logits
                     occ_hats.append(occ_hat.squeeze(0).detach().cpu())
             else:
-                pi = pi.unsqueeze(0).to(self.device)
+                pi = pi.unsqueeze(0).to(self.device, non_blocking=True)
                 with torch.no_grad():
                     occ_hat = self.model.decode(pi, c, **kwargs).logits
                 occ_hats.append(occ_hat.squeeze(0).detach().cpu())
@@ -358,56 +392,84 @@ class Generator3D(object):
 
     def extract_mesh(self, occ_hat, c=None, stats_dict=dict()):
         """ Extracts the mesh from the predicted occupancy grid.
-
         Args:
             occ_hat (tensor): value grid of occupancies
             c (tensor): encoded feature volumes
             stats_dict (dict): stats dictionary
         """
-        # Some short hands
-        n_x, n_y, n_z = occ_hat.shape
-        box_size = 1 + self.padding
-        threshold = np.log(self.threshold) - np.log(1. - self.threshold)
-        # Make sure that mesh is watertight
         t0 = time.time()
-        occ_hat_padded = np.pad(
-            occ_hat, 1, 'constant', constant_values=-1e6)
-        vertices, triangles = libmcubes.marching_cubes(
-            occ_hat_padded, threshold)
-        stats_dict['time (marching cubes)'] = time.time() - t0
-        # Strange behaviour in libmcubes: vertices are shifted by 0.5
-        vertices -= 0.5
-        # # Undo padding
-        vertices -= 1
+        box_size = 1 + self.padding
+        sdf = self.model.decoder.kwargs.get("sdf")
 
-        if self.vol_bound is not None:
-            # Scale the mesh back to its original metric
-            bb_min = self.vol_bound['query_vol'][:, 0].min(axis=0)
-            bb_max = self.vol_bound['query_vol'][:, 1].max(axis=0)
-            mc_unit = max(bb_max - bb_min) / (
-                        self.vol_bound['axis_n_crop'].max() * self.resolution0 * 2 ** self.upsampling_steps)
-            vertices = vertices * mc_unit + bb_min
+        if sdf:
+            threshold = self.threshold
+            gradient_direction = "descent"
         else:
-            # Normalize to bounding box
-            vertices /= np.array([n_x - 1, n_y - 1, n_z - 1])
-            vertices = box_size * (vertices - 0.5)
+            # Occupancy grid contains logits
+            threshold = np.log(self.threshold) - np.log(1 - self.threshold) if self.threshold > 0 else 0
+            gradient_direction = "ascent"
 
-        # Estimate normals if needed
-        if self.with_normals and not vertices.shape[0] == 0:
-            t0 = time.time()
-            normals = self.estimate_normals(vertices, c)
-            stats_dict['time (normals)'] = time.time() - t0
+        if self.use_skimage:
+            voxel_size = box_size / (np.array(occ_hat.shape) - 1)
+            try:
+                vertices, faces, normals, _ = marching_cubes(volume=occ_hat,
+                                                             level=threshold,
+                                                             spacing=voxel_size,
+                                                             gradient_direction=gradient_direction,
+                                                             allow_degenerate=False)
+                stats_dict['time (marching cubes)'] = time.time() - t0
 
+                mesh = trimesh.Trimesh(vertices,
+                                       faces,
+                                       vertex_normals=normals if self.with_normals else None,
+                                       process=False)
+
+                offsets = np.repeat(0.5 * box_size, 3)
+                mesh.apply_translation(-offsets)
+            except ValueError:
+                return trimesh.Trimesh()
         else:
-            normals = None
+            # Make sure that mesh is watertight
+            if sdf:
+                occ_hat *= -1
+                threshold *= -1
+            occ_hat_padded = np.pad(occ_hat, 1, 'constant', constant_values=-1e6)
+            vertices, triangles = libmcubes.marching_cubes(occ_hat_padded, threshold)
+            stats_dict['time (marching cubes)'] = time.time() - t0
+            # Strange behaviour in libmcubes: vertices are shifted by 0.5
+            vertices -= 0.5
+            # Undo padding
+            vertices -= 1
 
-        # Create mesh
-        mesh = trimesh.Trimesh(vertices, triangles,
-                               vertex_normals=normals,
-                               process=False)
+            if self.vol_bound is not None:
+                # Scale the mesh back to its original metric
+                bb_min = self.vol_bound['query_vol'][:, 0].min(axis=0)
+                bb_max = self.vol_bound['query_vol'][:, 1].max(axis=0)
+                mc_unit = max(bb_max - bb_min) / (
+                            self.vol_bound['axis_n_crop'].max() * self.resolution0 * 2 ** self.upsampling_steps)
+                vertices = vertices * mc_unit + bb_min
+            else:
+                # Normalize to bounding box
+                vertices /= (np.array(occ_hat.shape) - 1)
+                vertices = box_size * (vertices - 0.5)
+
+            # Estimate normals if needed
+            if self.with_normals and not vertices.shape[0] == 0:
+                t0 = time.time()
+                normals = self.estimate_normals(vertices, c)
+                stats_dict['time (normals)'] = time.time() - t0
+
+            else:
+                normals = None
+
+            # Create mesh
+            mesh = trimesh.Trimesh(vertices,
+                                   triangles,
+                                   vertex_normals=normals,
+                                   process=False)
 
         # Directly return if mesh is empty
-        if vertices.shape[0] == 0:
+        if mesh.vertices.shape[0] == 0:
             return mesh
 
         # TODO: normals are lost here
@@ -432,13 +494,13 @@ class Generator3D(object):
             c (tensor): encoded feature volumes
         """
         device = self.device
-        vertices = torch.FloatTensor(vertices)
+        vertices = torch.from_numpy(vertices)
         vertices_split = torch.split(vertices, self.points_batch_size)
 
         normals = []
         c = c.unsqueeze(0)
         for vi in vertices_split:
-            vi = vi.unsqueeze(0).to(device)
+            vi = vi.unsqueeze(0).to(device, non_blocking=True)
             vi.requires_grad_()
             occ_hat = self.model.decode(vi, c).logits
             out = occ_hat.sum()
@@ -469,11 +531,11 @@ class Generator3D(object):
         threshold = self.threshold
 
         # Vertex parameter
-        v0 = torch.FloatTensor(mesh.vertices).to(self.device)
-        v = torch.nn.Parameter(v0.clone())
+        v0 = torch.from_numpy(mesh.vertices).to(self.device, non_blocking=True)
+        v = torch.nn.Parameter(v0.clone(), requires_grad=True)
 
         # Faces of mesh
-        faces = torch.LongTensor(mesh.faces).to(self.device)
+        faces = torch.from_numpy(mesh.faces).to(self.device, non_blocking=True)
 
         # Start optimization
         optimizer = optim.RMSprop([v], lr=1e-4)
@@ -484,26 +546,19 @@ class Generator3D(object):
             # Loss
             face_vertex = v[faces]
             eps = np.random.dirichlet((0.5, 0.5, 0.5), size=faces.shape[0])
-            eps = torch.FloatTensor(eps).to(self.device)
+            eps = torch.from_numpy(eps).to(self.device, non_blocking=True)
             face_point = (face_vertex * eps[:, :, None]).sum(dim=1)
 
             face_v1 = face_vertex[:, 1, :] - face_vertex[:, 0, :]
             face_v2 = face_vertex[:, 2, :] - face_vertex[:, 1, :]
             face_normal = torch.cross(face_v1, face_v2)
-            face_normal = face_normal / \
-                          (face_normal.norm(dim=1, keepdim=True) + 1e-10)
-            face_value = torch.sigmoid(
-                self.model.decode(face_point.unsqueeze(0), c).logits
-            )
-            normal_target = -autograd.grad(
-                [face_value.sum()], [face_point], create_graph=True)[0]
+            face_normal = face_normal / (face_normal.norm(dim=1, keepdim=True) + 1e-10)
+            face_value = torch.sigmoid(self.model.decode(face_point.unsqueeze(0), c).logits)
+            normal_target = -autograd.grad([face_value.sum()], [face_point], create_graph=True)[0]
 
-            normal_target = \
-                normal_target / \
-                (normal_target.norm(dim=1, keepdim=True) + 1e-10)
+            normal_target = normal_target / (normal_target.norm(dim=1, keepdim=True) + 1e-10)
             loss_target = (face_value - threshold).pow(2).mean()
-            loss_normal = \
-                (face_normal - normal_target).pow(2).sum(dim=1).mean()
+            loss_normal = (face_normal - normal_target).pow(2).sum(dim=1).mean()
 
             loss = loss_target + 0.01 * loss_normal
 

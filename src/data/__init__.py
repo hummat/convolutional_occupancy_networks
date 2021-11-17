@@ -1,5 +1,5 @@
 from src.data.core import (
-    Shapes3dDataset, collate_remove_none, worker_init_fn
+    Shapes3dDataset, collate_remove_none, worker_init_fn, worker_init_reset_seed, seed_all_rng
 )
 from src.data.fields import (
     IndexField, PointsField,
@@ -7,7 +7,7 @@ from src.data.fields import (
 )
 from src.data.transforms import (
     PointcloudNoise, SubsamplePointcloud,
-    SubsamplePoints, RotatePointcloud
+    SubsamplePoints, Rotate
 )
 
 __all__ = [
@@ -15,6 +15,7 @@ __all__ = [
     Shapes3dDataset,
     collate_remove_none,
     worker_init_fn,
+    worker_init_reset_seed,
     # Fields
     IndexField,
     PointsField,
@@ -27,5 +28,5 @@ __all__ = [
     PointcloudNoise,
     SubsamplePointcloud,
     SubsamplePoints,
-    RotatePointcloud
+    Rotate
 ]

@@ -56,18 +56,12 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
             if bool(set(fea_type) & set(['xz', 'xy', 'yz'])):
                 encoder_kwargs['plane_resolution'] = dataset.total_reso
 
-    decoder = models.decoder_dict[decoder](
-        dim=dim, c_dim=c_dim, padding=padding,
-        **decoder_kwargs
-    )
+    decoder = models.decoder_dict[decoder](dim=dim, c_dim=c_dim, padding=padding, **decoder_kwargs)
 
     if encoder == 'idx':
         encoder = nn.Embedding(len(dataset), c_dim)
     elif encoder is not None:
-        encoder = encoder_dict[encoder](
-            dim=dim, c_dim=c_dim, padding=padding,
-            **encoder_kwargs
-        )
+        encoder = encoder_dict[encoder](dim=dim, c_dim=c_dim, padding=padding, **encoder_kwargs)
     else:
         encoder = None
 
@@ -76,7 +70,7 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
     return model
 
 
-def get_trainer(model, optimizer, cfg, device, **kwargs):
+def get_trainer(model, optimizer, cfg, device):
     """ Returns the trainer object.
 
     Args:
@@ -89,13 +83,18 @@ def get_trainer(model, optimizer, cfg, device, **kwargs):
     out_dir = cfg['training']['out_dir']
     vis_dir = os.path.join(out_dir, 'vis')
     input_type = cfg['data']['input_type']
+    loss = cfg['training']['loss']
+    assert loss is None or isinstance(loss, str)
 
     trainer = training.Trainer(
-        model, optimizer,
-        device=device, input_type=input_type,
-        vis_dir=vis_dir, threshold=threshold,
+        model,
+        optimizer,
+        device=device,
+        input_type=input_type,
+        vis_dir=vis_dir,
+        threshold=threshold,
         eval_sample=cfg['training']['eval_sample'],
-    )
+        loss=loss)
 
     return trainer
 
@@ -139,18 +138,20 @@ def get_generator(model, cfg, device, **kwargs):
 
     generator = generation.Generator3D(
         model,
-        device=device,
+        points_batch_size=cfg['generation']['batch_size'],
         threshold=cfg['test']['threshold'],
+        refinement_step=cfg['generation']['refinement_step'],
+        device=device,
         resolution0=cfg['generation']['resolution_0'],
         upsampling_steps=cfg['generation']['upsampling_steps'],
-        sample=cfg['generation']['use_sampling'],
-        refinement_step=cfg['generation']['refinement_step'],
-        simplify_nfaces=cfg['generation']['simplify_nfaces'],
-        input_type=cfg['data']['input_type'],
+        with_normals=cfg['generation']['normals'],
         padding=cfg['data']['padding'],
+        sample=cfg['generation']['use_sampling'],
+        input_type=cfg['data']['input_type'],
         vol_info=vol_info,
         vol_bound=vol_bound,
-    )
+        simplify_nfaces=cfg['generation']['simplify_nfaces'],
+        use_skimage=cfg['generation']['use_skimage'])
     return generator
 
 
@@ -170,7 +171,8 @@ def get_data_fields(mode, cfg):
             fields['points'] = data.PointsField(cfg['data']['points_file'],
                                                 points_transform,
                                                 unpackbits=cfg['data']['points_unpackbits'],
-                                                multi_files=cfg['data']['multi_files'])
+                                                multi_files=cfg['data']['multi_files'],
+                                                occ_from_sdf=cfg['data']['occ_from_sdf'])
         else:
             fields['points'] = data.PatchPointsField(cfg['data']['points_file'],
                                                      transform=points_transform,
@@ -189,7 +191,8 @@ def get_data_fields(mode, cfg):
             else:
                 fields['points_iou'] = data.PointsField(points_iou_file,
                                                         unpackbits=cfg['data']['points_unpackbits'],
-                                                        multi_files=cfg['data']['multi_files'])
+                                                        multi_files=cfg['data']['multi_files'],
+                                                        occ_from_sdf=cfg['data']['occ_from_sdf'])
         if voxels_file is not None:
             fields['voxels'] = data.VoxelsField(voxels_file)
         if pointcloud_file is not None:

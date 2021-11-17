@@ -1,11 +1,16 @@
 import glob
-import time
 import os
+import subprocess
+from multiprocessing import cpu_count
+from typing import List
 
+import h5py
 import numpy as np
 import open3d as o3d
+import tabulate
+import tqdm
 import trimesh
-import h5py
+from joblib import Parallel, delayed
 from scipy.interpolate import RegularGridInterpolator
 
 
@@ -72,9 +77,9 @@ def eval_sdf():
         frame = o3d.geometry.TriangleMesh().create_coordinate_frame(size=size)
         o3d.visualization.draw_geometries([mesh, frame])
 
-        #mesh = trimesh.load(file, process=False)
-        #print(mesh.bounds)
-        #mesh.show()
+        # mesh = trimesh.load(file, process=False)
+        # print(mesh.bounds)
+        # mesh.show()
     elif sdf:
         # for file in glob.glob("/home/matthias/Data2/datasets/shapenet/matthias/02876657/**/*.dist"):
         file = "/home/matthias/Data/Ubuntu/git/DISN/02876657/1ffd7113492d375593202bf99dddc268/1ffd7113492d375593202bf99dddc268.dist"
@@ -222,5 +227,127 @@ def eval_agile():
     # o3d.visualization.draw_geometries([voxel_grid])
 
 
+def obj_to_off(meshes):
+    def run(mesh):
+        command = f"meshlabserver -i {mesh} -o {mesh.replace('obj', 'off')}"
+        subprocess.run(command.split(' '), stdout=subprocess.DEVNULL)
+
+    with Parallel(n_jobs=cpu_count()) as parallel:
+        parallel(delayed(run)(mesh) for mesh in meshes)
+
+
+def edges_to_lineset(mesh, edges, color):
+    ls = o3d.geometry.LineSet()
+    ls.points = mesh.vertices
+    ls.lines = edges
+    colors = np.empty((np.asarray(edges).shape[0], 3))
+    colors[:] = color
+    ls.colors = o3d.utility.Vector3dVector(colors)
+    return ls
+
+
+def check_properties(mesh: str, visualize: bool = False) -> List[bool]:
+    mesh.compute_vertex_normals()
+
+    edge_manifold = mesh.is_edge_manifold(allow_boundary_edges=True)
+    edge_manifold_boundary = mesh.is_edge_manifold(allow_boundary_edges=False)
+    vertex_manifold = mesh.is_vertex_manifold()
+    self_intersecting = mesh.is_self_intersecting()
+    # watertight = mesh.is_watertight()
+    watertight = False
+    orientable = mesh.is_orientable()
+
+    properties = [edge_manifold,
+                  edge_manifold_boundary,
+                  vertex_manifold,
+                  self_intersecting,
+                  watertight,
+                  orientable]
+    keys = ["Edge Manifold",
+            "Edge Manifold Boundary",
+            "Vertex Manifold",
+            "Self Intersecting",
+            "Watertight",
+            "Orientable"]
+    data = dict(zip(keys, properties))
+    print(data)
+    # table = tabulate.tabulate(data, headers="keys")
+    # print(table)
+
+    if visualize:
+        geoms = [mesh]
+        if not edge_manifold:
+            edges = mesh.get_non_manifold_edges(allow_boundary_edges=True)
+            geoms.append(edges_to_lineset(mesh, edges, (1, 0, 0)))
+        if not edge_manifold_boundary:
+            edges = mesh.get_non_manifold_edges(allow_boundary_edges=False)
+            geoms.append(edges_to_lineset(mesh, edges, (0, 1, 0)))
+        if not vertex_manifold:
+            verts = np.asarray(mesh.get_non_manifold_vertices())
+            pcl = o3d.geometry.PointCloud(points=o3d.utility.Vector3dVector(np.asarray(mesh.vertices)[verts]))
+            pcl.paint_uniform_color((0, 0, 1))
+            geoms.append(pcl)
+        if self_intersecting:
+            intersecting_triangles = np.asarray(mesh.get_self_intersecting_triangles())
+            intersecting_triangles = intersecting_triangles[0:1]
+            intersecting_triangles = np.unique(intersecting_triangles)
+            triangles = np.asarray(mesh.triangles)[intersecting_triangles]
+            edges = [np.vstack((triangles[:, i], triangles[:, j])) for i, j in [(0, 1), (1, 2), (2, 0)]]
+            edges = np.hstack(edges).T
+            edges = o3d.utility.Vector2iVector(edges)
+            geoms.append(edges_to_lineset(mesh, edges, (1, 0, 1)))
+        o3d.visualization.draw_geometries(geoms, mesh_show_back_face=True)
+    return properties
+
+
+def repair_mesh(mesh):
+    mesh = mesh.remove_degenerate_triangles()
+    mesh = mesh.remove_duplicated_triangles()
+    mesh = mesh.remove_duplicated_vertices()
+    mesh = mesh.remove_non_manifold_edges()
+    mesh.orient_triangles()
+    return mesh
+
+
+def mesh_test():
+    synthset = "02876657"
+    shapenet_v1_path = f"/home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1/{synthset}/**/model.obj"
+    shapenet_v2_path = f"/home/matthias/Data2/datasets/shapenet/ShapeNetCore.v2/{synthset}/**/models/model_normalized.obj"
+    occnet_path = f"/home/matthias/Data/Ubuntu/git/occupancy_networks/data/ShapeNet.build/{synthset}/2_watertight/*.off"
+    disn_path = f"/home/matthias/Data2/datasets/shapenet/disn/{synthset}/**/isosurf.obj"
+    my_disn_path = f"/home/matthias/Data2/datasets/shapenet/matthias/disn/{synthset}/**/*.obj"
+    my_disn_from_occnet_path = f"/home/matthias/Data2/datasets/shapenet/matthias/normalized/*.obj"
+    manifoldplus_path = f"/home/matthias/Data2/datasets/shapenet/matthias/manifold/{synthset}/*.obj"
+
+    meshes = sorted(glob.glob(disn_path))
+    results = list()
+    for mesh in tqdm.tqdm(meshes):
+        # mesh_off = mesh.replace('obj', 'off')
+        mesh = trimesh.load(mesh, force="mesh", process=False)
+        if not mesh.is_watertight:
+            o3d_mesh = o3d.geometry.TriangleMesh()
+            o3d_mesh.vertices = o3d.utility.Vector3dVector(mesh.vertices)
+            o3d_mesh.triangles = o3d.utility.Vector3iVector(mesh.faces)
+            check_properties(o3d_mesh, visualize=True)
+        results.append(mesh.is_watertight)
+        # results.append(o3d.io.read_triangle_mesh(mesh, enable_post_processing=True).is_watertight())
+        # mesh = o3d.io.read_triangle_mesh(mesh)
+        # mesh = mesh.simplify_vertex_clustering(voxel_size=0.01)
+        # mesh.compute_triangle_normals()
+        # mesh.compute_vertex_normals()
+        # o3d.visualization.draw_geometries([mesh])
+        # results.append(check_properties(mesh)[-2])
+        # os.remove(mesh_off)
+    print(len(results), np.sum(results), np.sum(results) / len(results))
+
+    # Results synthset 02876657:
+    # ShapeNet v1: 498 11 0.02208835341365462
+    # ShapeNet v2: 498 13 0.02610441767068273
+    # OccNet: 498 463 0.929718875502008
+    # DISN: 498 293 0.5883534136546185
+    # My DISN: 498 401 0.8052208835341366
+    # My DISN from OccNet: 498 175 0.3514056224899598
+
+
 if __name__ == "__main__":
-    eval_sdf()
+    mesh_test()

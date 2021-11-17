@@ -90,6 +90,10 @@ class MeshEvaluator(object):
 
         if len(mesh.vertices) != 0 and len(mesh.faces) != 0:
             occ = check_mesh_contains(mesh, points_iou)
+
+            if occ_tgt.min() < 0:
+                occ_tgt = (occ_tgt <= 0).astype(np.float32)
+
             out_dict['iou'] = compute_iou(occ, occ_tgt)
         else:
             out_dict['iou'] = 0.
@@ -113,7 +117,7 @@ class MeshEvaluator(object):
         """
         # Return maximum losses if pointcloud is empty
         if pointcloud.shape[0] == 0:
-            logger.warn('Empty pointcloud / mesh detected!')
+            logger.warning('Empty pointcloud / mesh detected!')
             out_dict = EMPTY_PCL_DICT.copy()
             if normals is not None and normals_tgt is not None:
                 out_dict.update(EMPTY_PCL_DICT_NORMALS)
