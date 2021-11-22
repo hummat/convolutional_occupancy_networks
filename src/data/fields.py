@@ -1,11 +1,16 @@
+import math
 import os
+from typing import Union, Tuple, List
 
 import numpy as np
+import pyrender
 import trimesh
+import open3d as o3d
 
-from src.common import coord2index, normalize_coord
+from src.common import coord2index, normalize_coord, as_mesh
 from src.data.core import Field
 from src.utils import binvox_rw
+from scipy.spatial.transform import Rotation
 
 
 class IndexField(Field):
@@ -203,11 +208,6 @@ class VoxelsField(Field):
         return voxels
 
     def check_complete(self, files):
-        """ Check if field is complete.
-        
-        Args:
-            files: files
-        """
         complete = (self.file_name in files)
         return complete
 
@@ -279,11 +279,6 @@ class PatchPointCloudField(Field):
         return data
 
     def check_complete(self, files):
-        """ Check if field is complete.
-        
-        Args:
-            files: files
-        """
         complete = (self.file_name in files)
         return complete
 
@@ -339,11 +334,6 @@ class PointCloudField(Field):
         return data
 
     def check_complete(self, files):
-        """ Check if field is complete.
-        
-        Args:
-            files: files
-        """
         complete = (self.file_name in files)
         return complete
 
@@ -360,6 +350,7 @@ class PartialPointCloudField(Field):
         multi_files (callable): number of files
         part_ratio (float): max ratio for the remaining part
     """
+
     def __init__(self, file_name, transform=None, multi_files=None, part_ratio=0.7, plane: bool = False):
         self.file_name = file_name
         self.transform = transform
@@ -411,10 +402,128 @@ class PartialPointCloudField(Field):
         return data
 
     def check_complete(self, files):
-        """ Check if field is complete.
-        
-        Args:
-            files: files
-        """
+        complete = (self.file_name in files)
+        return complete
+
+
+class DepthPointCloudField(Field):
+    def __init__(self,
+                 file_name: str,
+                 size: int = 224,
+                 padding: float = 0,
+                 transform: Union[None, object] = None):
+        self.file_name = file_name
+        self.padding = padding
+        self.transform = transform
+
+        res_x, res_y = size, size
+        self.cam_intr = np.array([res_x, res_y, res_x / 2, res_y / 2], dtype=float)
+        self.img_size = np.array([res_x, res_y], dtype=np.int32)
+        self.znf = np.array([1 - 0.75, 1 + 0.75], dtype=float)
+
+        Y, X = np.mgrid[0:res_y, 0:res_x]
+        coordinates = np.vstack([X.ravel(), Y.ravel(), np.ones(res_x * res_y)])
+        inv_camk = np.linalg.inv([[res_x, 0, res_x / 2], [0, res_y, res_y / 2], [0, 0, 1]])
+        self.projection = (inv_camk @ coordinates).T
+
+    def load(self, model_path, idx, category):
+        file_path = os.path.join(model_path, self.file_name)
+
+        # Load & Normalize
+        try:
+            mesh = as_mesh(trimesh.load(file_path, process=False))
+        except Exception as e:
+            print(e)
+            return {None: None, 'normals': None}
+        scale = (mesh.bounds[1] - mesh.bounds[0]).max() / (1 - self.padding)
+        loc = (mesh.bounds[1] + mesh.bounds[0]) / 2
+        mesh.apply_translation(-loc)
+        mesh.apply_scale(1 / scale)
+
+        # Transform
+        R = Rotation.random().as_matrix()
+        T = np.eye(4)
+        T[:3, :3] = R
+        T[:3, 3] = [0, 0, 1]
+        mesh.apply_transform(T)
+
+        # Render
+        vertices = mesh.vertices.T.astype(np.float64).copy()
+        faces = (mesh.faces + 1).T.astype(np.float64).copy()  # Todo: Why +1?
+
+        depth, mask, img = pyrender.render(vertices,
+                                           faces,
+                                           self.cam_intr,
+                                           self.znf,
+                                           self.img_size)
+
+        # Reproject
+        points = depth.repeat(3).reshape(-1, 3) * self.projection
+        mask = (depth.ravel() > self.znf[0]) & (depth.ravel() < self.znf[1])
+        points = points[mask]
+        points[:, 2] -= 1
+        points = points @ R
+
+        data = {
+            None: points,
+            'normals': np.zeros_like(points, dtype=np.float32)
+        }
+
+        if self.transform is not None:
+            data = self.transform(data)
+
+        return data
+
+    def check_complete(self, files):
+        complete = (self.file_name in files)
+        return complete
+
+
+class DepthLikePointCloudField(Field):
+    def __init__(self,
+                 file_name: str,
+                 num_points: int = 25000,
+                 padding: float = 0,
+                 transform: Union[None, object] = None):
+        self.file_name = file_name
+        self.num_points = num_points
+        self.padding = padding
+        self.transform = transform
+
+    def load(self, model_path, idx, category):
+        file_path = os.path.join(model_path, self.file_name)
+
+        mesh = o3d.io.read_triangle_mesh(file_path, enable_post_processing=False)
+        size = mesh.get_max_bound() - mesh.get_min_bound()
+        scale = size.max() / (1 - self.padding)
+        loc = (mesh.get_max_bound() + mesh.get_min_bound()) / 2
+        mesh.translate(-loc)
+        mesh.scale(1 / scale, center=(0, 0, 0))
+
+        pcd = mesh.sample_points_uniformly(self.num_points)
+
+        camera = np.zeros(3)
+        camera[0] = np.random.uniform(-1, 1)
+        camera[1] = np.random.uniform(0, 1)  # Top views only
+        camera[2] = np.random.uniform(-1, 1)
+        # R = Rotation.random().as_matrix()
+        # pcd.rotate(R, center=(0, 0, 0))
+        _, indices = pcd.hidden_point_removal(camera, 100 * np.abs(camera[1]))
+        pcd = pcd.select_by_index(indices)
+        # pcd.rotate(R.T, center=(0, 0, 0))
+
+        points = np.asarray(pcd.points, dtype=np.float32)
+
+        data = {
+            None: points,
+            'normals': np.zeros_like(points, dtype=np.float32)
+        }
+
+        if self.transform is not None:
+            data = self.transform(data)
+
+        return data
+
+    def check_complete(self, files):
         complete = (self.file_name in files)
         return complete

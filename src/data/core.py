@@ -158,7 +158,10 @@ class Shapes3dDataset(data.Dataset):
 
         for field_name, field in self.fields.items():
             try:
-                field_data = field.load(model_path, idx, info)
+                if self.cfg['data']['input_type'] in ['depth', 'depth_like'] and field_name == 'inputs':
+                    field_data = field.load(self.cfg['data']['mesh_path'], idx, info)
+                else:
+                    field_data = field.load(model_path, idx, info)
             except Exception:
                 if self.no_except:
                     logger.warning('Error occurred when loading field %s of model %s' % (field_name, model))

@@ -1,7 +1,6 @@
 method: conv_onet
 data:
   input_type: partial_pointcloud
-  part_ratio: 0.5
   classes: null
   path: /home/matthias/Data2/datasets/shapenet/matthias/disn/core
   pointcloud_n: 3000
@@ -31,15 +30,15 @@ model:
     hidden_size: 32
   c_dim: 32
 training:
-  pre_trained_weights: /home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_partial/model_best.pt
+  pre_trained_weights: https://s3.eu-central-1.amazonaws.com/avg-projects/convolutional_occupancy_networks/models/pointcloud/shapenet_grid32.pt
   out_dir: out/pointcloud/shapenet_grid32_partial_occ_from_sdf
   batch_size: 32
   model_selection_metric: iou
   model_selection_mode: maximize
   print_every: 100
-  visualize_every: 1000
-  validate_every: 1000
-  checkpoint_every: 1000
+  visualize_every: 10000
+  validate_every: 10000
+  checkpoint_every: 2000
   backup_every: 10000
   n_workers: 8
   n_workers_val: 4

@@ -3,6 +3,8 @@ data:
   dataset: Shapes3D
   path: data/ShapeNet
   watertight_path: data/watertight
+  mesh_path: /home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1
+  mesh_file: 'model.obj'
   classes: null
   input_type: img
   part_ratio: 0.7

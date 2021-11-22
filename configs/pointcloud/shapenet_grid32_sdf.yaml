@@ -2,7 +2,7 @@ method: conv_onet
 data:
   input_type: pointcloud
   classes: null
-  path: /home/matthias/Data2/datasets/shapenet/matthias/disn/extra
+  path: /home/matthias/Data2/datasets/shapenet/matthias/disn/core
   pointcloud_n: 3000
   pointcloud_noise: 0.005
   points_subsample: 2048
@@ -41,6 +41,7 @@ training:
   backup_every: 10000
   n_workers: 8
   n_workers_val: 4
+  max_iter: 60000
 test:
   threshold: 0.0
   eval_mesh: true

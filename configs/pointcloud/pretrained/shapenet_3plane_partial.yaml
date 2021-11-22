@@ -1,5 +1,14 @@
 inherit_from: configs/pointcloud/shapenet_3plane_partial.yaml
+data:
+  part_ratio: 0.5
+  classes: [ "02876657" ]
+  path: data/ShapeNet/extra
+  voxels_file: 'model.binvox'
 generation:
   generation_dir: generation_pretrained
+  resolution_0: 128
+  upsampling_steps: 0
+  use_sklearn: true
 test:
   model_file: https://s3.eu-central-1.amazonaws.com/avg-projects/convolutional_occupancy_networks/models/pointcloud/shapenet_3plane_partial.pt
+  threshold: 0.5

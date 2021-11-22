@@ -1,12 +1,17 @@
 import copy
+import glob
 import os
+import time
 
 import numpy as np
 import torch
+import tqdm
 import trimesh
+from joblib import Parallel, delayed
 
 from src import config
 from src.checkpoints import CheckpointIO
+from src.data import fields
 from src.eval import MeshEvaluator
 
 
@@ -165,4 +170,19 @@ def from_pointcloud(use_trimesh=True, visualize=False):
 
 
 if __name__ == "__main__":
-    from_pointcloud(use_trimesh=True, visualize=False)
+    path = sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1/02876657/*") * 10)
+    # path = "/home/matthias/Data2/datasets/shapenet/occupancy_networks/ShapeNet/extra/02876657/2a9817a43c5b3983bb13793251b29587"
+    # field = fields.DepthLikePointCloudField("model.obj", num_points=25000)
+    field = fields.DepthPointCloudField("model.obj")
+    # field = fields.PartialPointCloudField("pointcloud.npz")
+    start = time.time()
+    counter = 0
+    res = Parallel(n_jobs=16)(delayed(field.load)(p, 0, 0) for i, p in enumerate(tqdm.tqdm(path[:100])))
+    res = [r[None] for r in res]
+    count = sum([True if len(r) < 3000 else False for r in res])
+    for i in range(10, len(res), 10):
+        points = np.concatenate(res[i - 10:i])
+        pcd = trimesh.PointCloud(points)
+        print(pcd.bounds[1], pcd.bounds[0])
+        pcd.show()
+    print(time.time() - start, count / len(path))

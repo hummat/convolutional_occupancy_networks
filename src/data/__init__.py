@@ -3,7 +3,8 @@ from src.data.core import (
 )
 from src.data.fields import (
     IndexField, PointsField,
-    VoxelsField, PatchPointsField, PointCloudField, PatchPointCloudField, PartialPointCloudField, 
+    VoxelsField, PatchPointsField, PointCloudField, PatchPointCloudField, PartialPointCloudField,
+    DepthLikePointCloudField, DepthPointCloudField
 )
 from src.data.transforms import (
     PointcloudNoise, SubsamplePointcloud,

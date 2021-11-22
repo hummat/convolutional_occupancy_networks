@@ -1,10 +1,24 @@
 # import multiprocessing
 import math
+from typing import Union
 
 import numpy as np
 import torch
+import trimesh
 
 from src.utils.libkdtree import KDTree
+
+
+def as_mesh(scene_or_mesh: Union[trimesh.Trimesh, trimesh.Scene]) -> trimesh.Trimesh:
+    if isinstance(scene_or_mesh, trimesh.Scene):
+        if len(scene_or_mesh.geometry) == 0:
+            mesh = None
+        else:
+            mesh = trimesh.util.concatenate([trimesh.Trimesh(vertices=g.vertices, faces=g.faces) for g in scene_or_mesh.geometry.values()])
+    else:
+        assert(isinstance(scene_or_mesh, trimesh.Trimesh))
+        mesh = scene_or_mesh
+    return mesh
 
 
 def compute_iou(occ1, occ2) -> float:

@@ -166,12 +166,20 @@ def get_inputs_field(cfg):
     if input_type is None:
         inputs_field = None
     elif input_type == 'pointcloud':
-        inputs_field = data.PointCloudField(cfg['data']['pointcloud_file'], transform, cfg['data']['multi_files'])
+        inputs_field = data.PointCloudField(cfg['data']['pointcloud_file'],
+                                            transform,
+                                            cfg['data']['multi_files'])
     elif input_type == 'partial_pointcloud':
         inputs_field = data.PartialPointCloudField(cfg['data']['pointcloud_file'],
                                                    transform,
                                                    cfg['data']['multi_files'],
                                                    part_ratio=cfg['data']['part_ratio'])
+    elif input_type == 'depth_like':
+        inputs_field = data.DepthLikePointCloudField(cfg['data']['mesh_file'],
+                                                     transform=transform)
+    elif input_type == 'depth':
+        inputs_field = data.DepthPointCloudField(cfg['data']['mesh_file'],
+                                                 transform=transform)
     elif input_type == 'pointcloud_crop':
         inputs_field = data.PatchPointCloudField(cfg['data']['pointcloud_file'], transform, None, cfg['data']['multi_files'])
     elif input_type == 'voxels':
