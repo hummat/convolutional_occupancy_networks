@@ -1,6 +1,6 @@
 # import multiprocessing
 import math
-from typing import Union
+from typing import Union, List, Tuple
 
 import numpy as np
 import torch
@@ -9,14 +9,52 @@ import trimesh
 from src.utils.libkdtree import KDTree
 
 
+def sample_point_on_upper_hemisphere(center: Union[List, Tuple, np.ndarray] = (0, 0, 0),
+                                     radius: float = 1,
+                                     direction: Union[List, Tuple, np.ndarray] = (0, 0, 1)) -> np.ndarray:
+    direction /= np.linalg.norm(direction)
+    while True:
+        location = sample_random_point_on_sphere(center, radius)
+        loc_in_sphere = location - np.array(center)
+        length = loc_in_sphere.dot(direction)
+        if length > 0:
+            return location
+
+
+def sample_random_point_on_sphere(center: Union[List, Tuple, np.ndarray] = (0, 0, 0),
+                                  radius: float = 1) -> np.ndarray:
+    direction = np.random.normal(size=3)
+    if np.count_nonzero(direction) == 0:
+        direction[0] = 1e-5
+    norm = np.sqrt(direction.dot(direction))
+    magnitude = radius
+    sampled_point = list(map(lambda x: magnitude * x / norm, direction))
+    return np.array(sampled_point) + np.array(center)
+
+
+def get_rotation_from_point(point: Union[List, Tuple, np.ndarray]) -> np.ndarray:
+    longitude = -math.atan2(point[0], point[1])
+    latitude = math.atan2(point[2], math.sqrt(point[0] ** 2 + point[1] ** 2))
+
+    R_x = np.array([[1, 0, 0],
+                    [0, math.cos(latitude), -math.sin(latitude)],
+                    [0, math.sin(latitude), math.cos(latitude)]])
+    R_y = np.array([[math.cos(longitude), 0, math.sin(longitude)],
+                    [0, 1, 0],
+                    [-math.sin(longitude), 0, math.cos(longitude)]])
+
+    return R_y.dot(R_x)
+
+
 def as_mesh(scene_or_mesh: Union[trimesh.Trimesh, trimesh.Scene]) -> trimesh.Trimesh:
     if isinstance(scene_or_mesh, trimesh.Scene):
         if len(scene_or_mesh.geometry) == 0:
             mesh = None
         else:
-            mesh = trimesh.util.concatenate([trimesh.Trimesh(vertices=g.vertices, faces=g.faces) for g in scene_or_mesh.geometry.values()])
+            mesh = trimesh.util.concatenate(
+                [trimesh.Trimesh(vertices=g.vertices, faces=g.faces) for g in scene_or_mesh.geometry.values()])
     else:
-        assert(isinstance(scene_or_mesh, trimesh.Trimesh))
+        assert (isinstance(scene_or_mesh, trimesh.Trimesh))
         mesh = scene_or_mesh
     return mesh
 

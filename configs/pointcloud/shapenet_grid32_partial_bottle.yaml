@@ -1,0 +1,56 @@
+method: conv_onet
+data:
+  input_type: partial_pointcloud
+  part_ratio: 0.5
+  classes: [ "02876657" ]
+  path: data/ShapeNet/extra
+  pointcloud_n: 3000
+  pointcloud_noise: 0.005
+  points_subsample: 2048
+  points_file: points.npz
+  points_iou_file: points.npz
+  voxels_file: 'model.binvox'
+model:
+  encoder: pointnet_local_pool
+  encoder_kwargs:
+    hidden_dim: 32
+    plane_type: 'grid'
+    grid_resolution: 32
+    unet3d: true
+    unet3d_kwargs:
+      num_levels: 3
+      f_maps: 32
+      in_channels: 32
+      out_channels: 32
+  decoder: simple_local
+  decoder_kwargs:
+    sample_mode: bilinear # bilinear / nearest
+    hidden_size: 32
+  c_dim: 32
+training:
+  pre_trained_weights: /home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_partial/model_best.pt
+  out_dir: out/pointcloud/shapenet_grid32_partial_bottle
+  batch_size: 32
+  model_selection_metric: iou
+  model_selection_mode: maximize
+  print_every: 100
+  visualize_every: 1000
+  validate_every: 1000
+  checkpoint_every: 1000
+  backup_every: 1000
+  n_workers: 8
+  n_workers_val: 4
+  max_iter: 20000
+test:
+  threshold: 0.5
+  eval_mesh: true
+  eval_pointcloud: false
+  model_file: model_best.pt
+generation:
+  vis_n_outputs: 2
+  refine: false
+  resolution_0: 128
+  upsampling_steps: 0
+  use_sklearn: true
+  n_x: 128
+  n_z: 1

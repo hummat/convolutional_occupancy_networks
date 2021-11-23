@@ -152,7 +152,6 @@ class Trainer(BaseTrainer):
 
             eval_dict['iou_voxels'] = iou_voxels
 
-        torch.cuda.empty_cache()
         return eval_dict
 
     def compute_loss(self, data):

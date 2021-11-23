@@ -7,7 +7,7 @@ import pyrender
 import trimesh
 import open3d as o3d
 
-from src.common import coord2index, normalize_coord, as_mesh
+from src.common import coord2index, normalize_coord, as_mesh, get_rotation_from_point, sample_point_on_upper_hemisphere
 from src.data.core import Field
 from src.utils import binvox_rw
 from scipy.spatial.transform import Rotation
@@ -411,9 +411,11 @@ class DepthPointCloudField(Field):
                  file_name: str,
                  size: int = 224,
                  padding: float = 0,
+                 upper_hemisphere: bool = False,
                  transform: Union[None, object] = None):
         self.file_name = file_name
         self.padding = padding
+        self.upper_hemisphere = upper_hemisphere
         self.transform = transform
 
         res_x, res_y = size, size
@@ -441,7 +443,11 @@ class DepthPointCloudField(Field):
         mesh.apply_scale(1 / scale)
 
         # Transform
-        R = Rotation.random().as_matrix()
+        if self.upper_hemisphere:
+            point = sample_point_on_upper_hemisphere(direction=(0, 1, 0))
+            R = get_rotation_from_point(point)  # Todo: Not working as expected
+        else:
+            R = Rotation.random().as_matrix()
         T = np.eye(4)
         T[:3, :3] = R
         T[:3, 3] = [0, 0, 1]

@@ -5,7 +5,7 @@ data:
   path: data/ShapeNet/extra
   voxels_file: 'model.binvox'
 generation:
-  generation_dir: generation_pretrained
+  generation_dir: generation_bottle
   resolution_0: 128
   upsampling_steps: 0
   use_sklearn: true

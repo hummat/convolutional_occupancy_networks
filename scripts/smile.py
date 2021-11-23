@@ -13,6 +13,7 @@ from src import config
 from src.checkpoints import CheckpointIO
 from src.data import fields
 from src.eval import MeshEvaluator
+from src.common import sample_point_on_upper_hemisphere
 
 
 def load_mesh(file_path: str, process: bool = True, padding: float = 0.1):
@@ -173,16 +174,21 @@ if __name__ == "__main__":
     path = sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1/02876657/*") * 10)
     # path = "/home/matthias/Data2/datasets/shapenet/occupancy_networks/ShapeNet/extra/02876657/2a9817a43c5b3983bb13793251b29587"
     # field = fields.DepthLikePointCloudField("model.obj", num_points=25000)
-    field = fields.DepthPointCloudField("model.obj")
+    field = fields.DepthPointCloudField("model.obj", upper_hemisphere=True)
+    cams = []
+    for _ in range(1000):
+        cams.append(sample_point_on_upper_hemisphere(direction=(0, 1, 0)))
+
     # field = fields.PartialPointCloudField("pointcloud.npz")
     start = time.time()
     counter = 0
     res = Parallel(n_jobs=16)(delayed(field.load)(p, 0, 0) for i, p in enumerate(tqdm.tqdm(path[:100])))
+    cams = [r['point'] for r in res]
     res = [r[None] for r in res]
     count = sum([True if len(r) < 3000 else False for r in res])
     for i in range(10, len(res), 10):
         points = np.concatenate(res[i - 10:i])
-        pcd = trimesh.PointCloud(points)
+        pcd = trimesh.PointCloud(np.concatenate([points, cams]))
         print(pcd.bounds[1], pcd.bounds[0])
         pcd.show()
     print(time.time() - start, count / len(path))

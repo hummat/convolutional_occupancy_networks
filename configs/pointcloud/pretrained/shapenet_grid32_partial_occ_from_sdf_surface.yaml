@@ -1,0 +1,10 @@
+inherit_from: configs/pointcloud/shapenet_grid32_partial_occ_from_sdf_surface.yaml
+data:
+  part_ratio: 0.5
+  classes: [ "02876657" ]
+  path: /home/matthias/Data2/datasets/shapenet/matthias/disn/extra
+  points_iou_file: uniform_grid.npy
+generation:
+  generation_dir: generation_bottle
+test:
+  model_file: /home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_partial_occ_from_sdf_surface/model_best.pt

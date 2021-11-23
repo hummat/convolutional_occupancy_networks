@@ -147,7 +147,6 @@ visualize_every = cfg['training']['visualize_every']
 # Print model
 nparameters = sum(p.numel() for p in model.parameters())
 print('Total number of parameters: %d' % nparameters)
-
 print('output mesh_path: ', cfg['training']['out_dir'])
 
 while True:
@@ -179,16 +178,6 @@ while True:
 
                 mesh.export(
                     os.path.join(out_dir, 'vis', '{}_{}_{}.off'.format(it, data_vis['category'], data_vis['it'])))
-
-        # Save checkpoint
-        if checkpoint_every > 0 and (it % checkpoint_every) == 0:
-            print('Saving checkpoint')
-            checkpoint_io.save('model.pt', epoch_it=epoch_it, it=it, loss_val_best=metric_val_best)
-
-        # Backup if necessary
-        if backup_every > 0 and (it % backup_every) == 0:
-            print('Backup checkpoint')
-            checkpoint_io.save('model_%d.pt' % it, epoch_it=epoch_it, it=it, loss_val_best=metric_val_best)
 
         # Run validation
         if validate_every > 0 and (it % validate_every) == 0 or (epoch_it == 1 and it == 1) or validate_first:
@@ -224,12 +213,22 @@ while True:
                 print('New best model: %s %.4f' % (model_selection_metric, metric_val_best))
                 checkpoint_io.save('model_best.pt', epoch_it=epoch_it, it=it, loss_val_best=metric_val_best)
 
+        # Save checkpoint
+        if checkpoint_every > 0 and (it % checkpoint_every) == 0:
+            print('Saving checkpoint')
+            checkpoint_io.save('model.pt', epoch_it=epoch_it, it=it, loss_val_best=metric_val_best)
+
+        # Backup if necessary
+        if backup_every > 0 and (it % backup_every) == 0:
+            print('Backup checkpoint')
+            checkpoint_io.save('model_%d.pt' % it, epoch_it=epoch_it, it=it, loss_val_best=metric_val_best)
+
         # Exit if necessary
         if 0 < exit_after <= (time.time() - t0):
             print('Time limit reached. Exiting.')
             checkpoint_io.save('model.pt', epoch_it=epoch_it, it=it, loss_val_best=metric_val_best)
             exit(0)
         if max_iter is not None and it >= max_iter:
-            print("Max iterations reached. Exiting")
+            print("Max iterations reached. Exiting.")
             checkpoint_io.save('model.pt', epoch_it=epoch_it, it=it, loss_val_best=metric_val_best)
             exit(0)

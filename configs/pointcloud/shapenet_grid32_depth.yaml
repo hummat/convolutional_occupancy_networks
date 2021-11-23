@@ -1,18 +1,14 @@
 method: conv_onet
 data:
-  input_type: partial_pointcloud
-  part_ratio: 0.5
-  classes: [ "02876657" ]
-  path: /home/matthias/Data2/datasets/shapenet/matthias/disn/extra
+  input_type: depth
+  classes: null
+  path: data/ShapeNet/core
   pointcloud_n: 3000
   pointcloud_noise: 0.005
   points_subsample: 2048
-  points_file: uniform_random.npy
-  points_iou_file: uniform_random.npy
-  pointcloud_file: surface.npy
-  pointcloud_chamfer_file: surface.npy
+  points_file: points.npz
+  points_iou_file: points.npz
   voxels_file: 'model.binvox'
-  occ_from_sdf: true
 model:
   encoder: pointnet_local_pool
   encoder_kwargs:
@@ -31,18 +27,19 @@ model:
     hidden_size: 32
   c_dim: 32
 training:
-  pre_trained_weights: /home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_partial_occ_from_sdf/model_best.pt
-  out_dir: out/pointcloud/shapenet_grid32_partial_occ_from_sdf_pretrained
+  pre_trained_weights: /home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_partial/model_best.pt
+  out_dir: out/pointcloud/shapenet_grid32_depth
   batch_size: 32
   model_selection_metric: iou
   model_selection_mode: maximize
   print_every: 100
-  visualize_every: 1000
-  validate_every: 1000
-  checkpoint_every: 1000
+  visualize_every: 10000
+  validate_every: 10000
+  checkpoint_every: 2000
   backup_every: 10000
   n_workers: 8
   n_workers_val: 4
+  max_iters: 60000
 test:
   threshold: 0.5
   eval_mesh: true
@@ -51,8 +48,8 @@ test:
 generation:
   vis_n_outputs: 2
   refine: false
-  upsampling_steps: 0
   resolution_0: 128
-  use_skimage: true
+  upsampling_steps: 0
+  use_sklearn: true
   n_x: 128
   n_z: 1

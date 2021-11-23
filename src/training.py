@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 from collections import defaultdict
 from tqdm import tqdm
@@ -21,6 +22,7 @@ class BaseTrainer(object):
                 eval_list[k].append(v)
 
         eval_dict = {k: np.mean(v) for k, v in eval_list.items()}
+        torch.cuda.empty_cache()
         return eval_dict
 
     def train_step(self, *args, **kwargs):

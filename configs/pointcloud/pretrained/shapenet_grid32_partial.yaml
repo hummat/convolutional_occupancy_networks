@@ -1,5 +1,9 @@
-inherit_from: configs/pointcloud/shapenet_grid32.yaml
+inherit_from: configs/pointcloud/shapenet_grid32_partial.yaml
+data:
+  part_ratio: 0.5
+  classes: [ "02876657" ]
+  path: data/ShapeNet/extra
 generation:
-  generation_dir: generation_pretrained
+  generation_dir: generation_bottle
 test:
   model_file: /home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_partial/model_best.pt
