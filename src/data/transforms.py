@@ -65,10 +65,10 @@ class PointcloudNoise(object):
     It adds noise to point cloud data.
 
     Args:
-        stddev (int): standard deviation
+        stddev (float): standard deviation
     """
 
-    def __init__(self, stddev):
+    def __init__(self, stddev: float):
         self.stddev = stddev
 
     def __call__(self, data):

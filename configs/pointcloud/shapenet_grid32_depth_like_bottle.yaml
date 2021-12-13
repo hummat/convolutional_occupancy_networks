@@ -1,0 +1,14 @@
+inherit_from: configs/pointcloud/shapenet_grid32_depth_like.yaml
+data:
+  classes: [ "02876657" ]
+  path: data/ShapeNet/extra
+training:
+  pre_trained_weights: /home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_depth_like/model_best.pt
+  out_dir: out/pointcloud/shapenet_grid32_depth_like_bottle
+  visualize_every: 1000
+  validate_every: 1000
+  checkpoint_every: 1000
+  backup_every: 1000
+  max_iter: 20000
+generation:
+  vis_n_outputs: 10

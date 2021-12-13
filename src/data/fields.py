@@ -411,10 +411,12 @@ class DepthPointCloudField(Field):
                  file_name: str,
                  size: int = 224,
                  padding: float = 0,
+                 num_points: int = 3000,
                  upper_hemisphere: bool = False,
                  transform: Union[None, object] = None):
         self.file_name = file_name
         self.padding = padding
+        self.num_points = num_points
         self.upper_hemisphere = upper_hemisphere
         self.transform = transform
 
@@ -428,15 +430,15 @@ class DepthPointCloudField(Field):
         inv_camk = np.linalg.inv([[res_x, 0, res_x / 2], [0, res_y, res_y / 2], [0, 0, 1]])
         self.projection = (inv_camk @ coordinates).T
 
+        import logging
+        logger = logging.getLogger("trimesh")
+        logger.setLevel(logging.ERROR)
+
     def load(self, model_path, idx, category):
         file_path = os.path.join(model_path, self.file_name)
 
         # Load & Normalize
-        try:
-            mesh = as_mesh(trimesh.load(file_path, process=False))
-        except Exception as e:
-            print(e)
-            return {None: None, 'normals': None}
+        mesh = trimesh.load(file_path, process=False)
         scale = (mesh.bounds[1] - mesh.bounds[0]).max() / (1 - self.padding)
         loc = (mesh.bounds[1] + mesh.bounds[0]) / 2
         mesh.apply_translation(-loc)
@@ -466,12 +468,17 @@ class DepthPointCloudField(Field):
         # Reproject
         points = depth.repeat(3).reshape(-1, 3) * self.projection
         mask = (depth.ravel() > self.znf[0]) & (depth.ravel() < self.znf[1])
-        points = points[mask]
-        points[:, 2] -= 1
-        points = points @ R
+
+        # Not enough points
+        if np.sum(mask) < self.num_points:
+            points = mesh.sample(self.num_points).astype(np.float32)
+        else:
+            points = points[mask]
+            points[:, 2] -= 1
+            points = points @ R
 
         data = {
-            None: points,
+            None: points.astype(np.float32),
             'normals': np.zeros_like(points, dtype=np.float32)
         }
 
@@ -488,42 +495,76 @@ class DepthPointCloudField(Field):
 class DepthLikePointCloudField(Field):
     def __init__(self,
                  file_name: str,
-                 num_points: int = 25000,
+                 num_points: int = 3000,
                  padding: float = 0,
+                 upper_hemisphere: bool = False,
+                 rotate_object: str = '',
+                 sample_camera: str = '',
                  transform: Union[None, object] = None):
         self.file_name = file_name
         self.num_points = num_points
         self.padding = padding
+        self.upper_hemisphere = upper_hemisphere
+        self.rotate_object = rotate_object
+        self.sample_camera = sample_camera
         self.transform = transform
 
     def load(self, model_path, idx, category):
         file_path = os.path.join(model_path, self.file_name)
 
-        mesh = o3d.io.read_triangle_mesh(file_path, enable_post_processing=False)
-        size = mesh.get_max_bound() - mesh.get_min_bound()
-        scale = size.max() / (1 - self.padding)
-        loc = (mesh.get_max_bound() + mesh.get_min_bound()) / 2
-        mesh.translate(-loc)
-        mesh.scale(1 / scale, center=(0, 0, 0))
+        if file_path.endswith(".npy") or file_path.endswith(".npz"):
+            pointcloud_dict = np.load(file_path)
+            if isinstance(pointcloud_dict, np.lib.npyio.NpzFile):
+                points = pointcloud_dict['points']
+            else:
+                points = pointcloud_dict
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(points)
+        else:
+            mesh = o3d.io.read_triangle_mesh(file_path, enable_post_processing=False)
+            size = mesh.get_max_bound() - mesh.get_min_bound()
+            scale = size.max() / (1 - self.padding)
+            loc = (mesh.get_max_bound() + mesh.get_min_bound()) / 2
+            mesh.translate(-loc)
+            mesh.scale(1 / scale, center=(0, 0, 0))
+            pcd = mesh.sample_points_uniformly(100000)
 
-        pcd = mesh.sample_points_uniformly(self.num_points)
+        if self.rotate_object:
+            angles = np.random.uniform(360, size=len(self.rotate_object) if len(self.rotate_object) > 1 else None)
+            if self.upper_hemisphere and 'x' in self.rotate_object:
+                angles[list(self.rotate_object).index('x')] = np.random.uniform(0, 90)
+            rot = Rotation.from_euler(self.rotate_object, angles, degrees=True).as_matrix()
+            trafo = np.eye(4)
+            trafo[:3, :3] = rot
+            pcd.transform(trafo)
 
-        camera = np.zeros(3)
-        camera[0] = np.random.uniform(-1, 1)
-        camera[1] = np.random.uniform(0, 1)  # Top views only
-        camera[2] = np.random.uniform(-1, 1)
-        # R = Rotation.random().as_matrix()
-        # pcd.rotate(R, center=(0, 0, 0))
-        _, indices = pcd.hidden_point_removal(camera, 100 * np.abs(camera[1]))
-        pcd = pcd.select_by_index(indices)
-        # pcd.rotate(R.T, center=(0, 0, 0))
+        camera = [0, 0, 1]
+        if 'x' in self.sample_camera:
+            camera[0] = np.random.uniform(low=-1, high=1)
+        if 'y' in self.sample_camera:
+            camera[1] = np.random.uniform(low=0 if self.upper_hemisphere else -1, high=1)
+        if 'z' in self.sample_camera:
+            camera[2] = np.random.uniform(low=-1, high=1)
 
-        points = np.asarray(pcd.points, dtype=np.float32)
+        camera /= np.linalg.norm(camera)
+        # diameter = np.linalg.norm(np.asarray(pcd.get_max_bound()) - np.asarray(pcd.get_min_bound()))
+        _, indices = pcd.hidden_point_removal(camera, 100)
+
+        # Not enough points
+        if len(indices) < self.num_points:
+            points = np.asarray(pcd.points, dtype=np.float32)
+        else:
+            pcd = pcd.select_by_index(indices)
+            points = np.asarray(pcd.points, dtype=np.float32)
 
         data = {
             None: points,
-            'normals': np.zeros_like(points, dtype=np.float32)
+            'normals': np.zeros_like(points, dtype=np.float32),
         }
+        if self.rotate_object:
+            data['rot'] = rot
+
+        data['cam'] = camera
 
         if self.transform is not None:
             data = self.transform(data)

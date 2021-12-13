@@ -5,11 +5,14 @@ import time
 
 import numpy as np
 import torch
+from torchvision import transforms
 import tqdm
 import trimesh
+import open3d as o3d
 from joblib import Parallel, delayed
+from scipy.spatial.transform import Rotation
 
-from src import config
+from src import config, data
 from src.checkpoints import CheckpointIO
 from src.data import fields
 from src.eval import MeshEvaluator
@@ -30,7 +33,7 @@ def load_mesh(file_path: str, process: bool = True, padding: float = 0.1):
     return mesh
 
 
-def process_mesh(mesh, padding: float = 0, flip_yz: bool = False, with_transforms: bool = False):
+def process_mesh(mesh, padding: float = 0, flip_yz: bool = True, with_transforms: bool = True):
     bbox = mesh.bounding_box.bounds
     loc = (bbox[0] + bbox[1]) / 2
     scale = (bbox[1] - bbox[0]).max() / (1 - padding)
@@ -48,31 +51,33 @@ def process_mesh(mesh, padding: float = 0, flip_yz: bool = False, with_transform
     return mesh
 
 
-def from_pointcloud(use_trimesh=True, visualize=False):
+def from_pointcloud(use_trimesh=True, visualize=True):
     path_prefix = "/home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks"
     default_path = os.path.join(path_prefix, "configs/default.yaml")
-    model_path = os.path.join(path_prefix, "configs/pointcloud/pretrained/shapenet_grid32.yaml")
+    model_path = os.path.join(path_prefix, "configs/pointcloud/shapenet_grid32_depth_like_upper.yaml")
     cfg = config.load_config(model_path, default_path)
     device = torch.device("cuda")
     # file_path = "/home/matthias/Data2/datasets/bop/ycb/models/021_bleach_cleanser/google_512k/nontextured.ply"
-    file_path = "/home/matthias/Data/Ubuntu/data/aae_workspace/models/case.ply"
+    file_path = "/home/matthias/Data/Ubuntu/data/agile_justin/exp8/object_points.ply"
 
     if use_trimesh:
         mesh = load_mesh(file_path)
-        mesh = process_mesh(mesh, flip_yz=True)
+        mesh, loc, scale = process_mesh(mesh, flip_yz=True)
         # T = np.eye(4)
         # T[:2] *= -1
         # mesh.apply_transform(T)
 
-        points = mesh.sample(100000).astype(np.float32)
+        #points = mesh.sample(100000).astype(np.float32)
+        all_points = mesh.vertices
+        all_points[:, 1] *= -1
         # side = np.random.randint(3)
         # xb = [points[:, side].min(), points[:, side].max()]
         # length = np.random.uniform(0.5 * (xb[1] - xb[0]), (xb[1] - xb[0]))
         # ind = (points[:, side] - xb[0]) <= length
         # points = points[ind]
 
-        indices = np.random.randint(points.shape[0], size=3000)
-        points = points[indices, :]
+        indices = np.random.randint(all_points.shape[0], size=len(all_points))
+        points = all_points[indices, :].astype(np.float32)
 
         noise = 0.005 * np.random.randn(*points.shape)
         noise = noise.astype(np.float32)
@@ -135,15 +140,15 @@ def from_pointcloud(use_trimesh=True, visualize=False):
 
     model = config.get_model(cfg, device)
     checkpoint_io = CheckpointIO("..", model=model)
-    # checkpoint_io.load(os.path.join(path_prefix, cfg['test']['model_file']))
-    checkpoint_io.load(cfg['test']['model_file'])
+    checkpoint_io.load(os.path.join(path_prefix, cfg['training']['out_dir'], cfg['test']['model_file']))
+    # checkpoint_io.load(cfg['test']['model_file'])
     model.eval()
 
     generator = config.get_generator(model, cfg, device)
     mesh_pred = generator.generate_mesh(data, return_stats=False)
 
     evaluator = MeshEvaluator()
-    print(evaluator.eval_pointcloud(mesh_pred.sample(100000), mesh.sample(100000)))
+    print(evaluator.eval_pointcloud(mesh_pred.sample(len(all_points)), all_points))
 
     if visualize:
         if use_trimesh:
@@ -170,25 +175,110 @@ def from_pointcloud(use_trimesh=True, visualize=False):
         mesh_pred.export("smile.off")
 
 
-if __name__ == "__main__":
-    path = sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1/02876657/*") * 10)
-    # path = "/home/matthias/Data2/datasets/shapenet/occupancy_networks/ShapeNet/extra/02876657/2a9817a43c5b3983bb13793251b29587"
-    # field = fields.DepthLikePointCloudField("model.obj", num_points=25000)
-    field = fields.DepthPointCloudField("model.obj", upper_hemisphere=True)
-    cams = []
-    for _ in range(1000):
-        cams.append(sample_point_on_upper_hemisphere(direction=(0, 1, 0)))
+def look_at(_from, _to=(0, 0, 0), _tmp=(0, 1, 0), return_vectors: bool = False) -> np.ndarray:
+    _tmp /= np.linalg.norm(_tmp)
+    forward = _from - _to
+    forward /= np.linalg.norm(forward)
+    right = np.cross(_tmp, forward)
+    right /= np.linalg.norm(right)
+    up = np.cross(forward, right)
+    up /= np.linalg.norm(up)
+
+    cam_to_world = np.eye(4)
+    cam_to_world[0, 0] = right[0]
+    cam_to_world[0, 1] = right[1]
+    cam_to_world[0, 2] = right[2]
+    cam_to_world[1, 0] = up[0]
+    cam_to_world[1, 1] = up[1]
+    cam_to_world[1, 2] = up[2]
+    cam_to_world[2, 0] = forward[0]
+    cam_to_world[2, 1] = forward[1]
+    cam_to_world[2, 2] = forward[2]
+
+    cam_to_world[3, 0] = _from[0]
+    cam_to_world[3, 1] = _from[1]
+    cam_to_world[3, 2] = _from[2]
+
+    if return_vectors:
+        return forward, right, up
+    return cam_to_world.T
+
+
+def apply_extrinsics(points: np.ndarray, extrinsics: np.ndarray) -> np.ndarray:
+    rot_xyz = look_at(extrinsics)[:3, :3]
+    rot_x = np.arctan2(rot_xyz[2, 1], rot_xyz[2, 2])
+    rot_x = rot_x - np.pi if rot_x > 0 else rot_x
+    rot_x = Rotation.from_euler('x', rot_x).as_matrix()
+    return points @ rot_xyz @ rot_x.T
+
+
+def data_test():
+    # path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1/*/*")))
+    path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/occupancy_networks/ShapeNet/extra/02876657/*")))
+    # path = np.array([p.replace("occupancy_networks/ShapeNet/core", "ShapeNetCore.v1") for p in path])
+    path = np.array([p for p in path if not p.endswith(".lst")])
+    transform = [
+        data.SubsamplePointcloud(3000),
+        data.PointcloudNoise(0.005)
+    ]
+    transform = transforms.Compose(transform)
+    field = fields.DepthLikePointCloudField("pointcloud.npz",
+                                            upper_hemisphere=True,
+                                            sample_camera='xyz',
+                                            rotate_object='',
+                                            transform=transform)  # 22.7s (mesh), 36.6s (pcd)
+    field_gt = fields.PointCloudField("pointcloud.npz")
+    # field = fields.DepthPointCloudField("model.off", upper_hemisphere=False, transform=transform)  # 41.7s
+    #cams = []
+    #for _ in range(1000):
+    #    cams.append(sample_point_on_upper_hemisphere(direction=(0, 1, 0)))
 
     # field = fields.PartialPointCloudField("pointcloud.npz")
     start = time.time()
     counter = 0
-    res = Parallel(n_jobs=16)(delayed(field.load)(p, 0, 0) for i, p in enumerate(tqdm.tqdm(path[:100])))
-    cams = [r['point'] for r in res]
+    np.random.seed(42)
+    path = sorted(list(np.random.choice(path, size=10, replace=False)) * 10)
+    res = Parallel(n_jobs=16)(delayed(field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
+    # cams = [r['point'] for r in res]
+    cams = [r["cam"] for r in res]
+    # rot = [r["rot"] for r in res]
     res = [r[None] for r in res]
     count = sum([True if len(r) < 3000 else False for r in res])
-    for i in range(10, len(res), 10):
-        points = np.concatenate(res[i - 10:i])
-        pcd = trimesh.PointCloud(np.concatenate([points, cams]))
-        print(pcd.bounds[1], pcd.bounds[0])
-        pcd.show()
+    for i, p in enumerate(path):
+        points = res[i]
+        # forward, right, up = look_at(cams[i - 1], return_vectors=True)
+        points = apply_extrinsics(points, cams[i])
+
+        points_gt = field_gt.load(p, i, 0)[None]
+        points_gt = apply_extrinsics(points_gt, cams[i])
+        #rot_z = Rotation.from_euler('z', rot_z).as_matrix()
+        #points_gt = points_gt @ rot_z.T
+
+        forward = [0, 0, 1]
+        up = [0, 1, 0]
+        o3d.visualization.draw_geometries([o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points)),
+                                           o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points_gt)).paint_uniform_color([0.8, 0.8, 0.8]),
+                                           o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)],
+                                          window_name=path[i].split('/')[-1],
+                                          zoom=1,
+                                          lookat=[0, 0, 0],
+                                          front=forward,
+                                          up=up)
+        # view.set_caption(path[i].split('/')[-2])
+    # for i in range(10, len(res), 10):
+    #     points = np.concatenate(res[i - 10:i])
+    #     pcd = trimesh.PointCloud(np.concatenate([points, cams]))
+    #     print(pcd.bounds[1], pcd.bounds[0])
+    #     pcd.show()
+    # for r, p in zip(res, path):
+    #     t = np.eye(4)
+    #     t[:3, :3] = r
+    #     mesh = trimesh.load(os.path.join(p, "model.off"), process=False)
+    #     mesh = mesh.apply_transform(t)
+    #     mesh.show()
+    #     # print(pcd.bounds[1], pcd.bounds[0])
     print(time.time() - start, count / len(path))
+
+
+if __name__ == "__main__":
+    data_test()

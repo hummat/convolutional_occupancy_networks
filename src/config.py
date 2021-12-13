@@ -175,10 +175,14 @@ def get_inputs_field(cfg):
                                                    cfg['data']['multi_files'],
                                                    part_ratio=cfg['data']['part_ratio'])
     elif input_type == 'depth_like':
-        inputs_field = data.DepthLikePointCloudField(cfg['data']['mesh_file'],
+        inputs_field = data.DepthLikePointCloudField(cfg['data']['mesh_file'] if cfg['data']['mesh_file'] else cfg['data']['pointcloud_file'],
+                                                     num_points=cfg['data']['pointcloud_n'],
+                                                     upper_hemisphere=cfg['data']['sample_upper_hemisphere'],
                                                      transform=transform)
     elif input_type == 'depth':
         inputs_field = data.DepthPointCloudField(cfg['data']['mesh_file'],
+                                                 num_points=cfg['data']['pointcloud_n'],
+                                                 upper_hemisphere=cfg['data']['sample_upper_hemisphere'],
                                                  transform=transform)
     elif input_type == 'pointcloud_crop':
         inputs_field = data.PatchPointCloudField(cfg['data']['pointcloud_file'], transform, None, cfg['data']['multi_files'])

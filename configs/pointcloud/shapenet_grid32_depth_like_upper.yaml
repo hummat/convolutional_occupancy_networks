@@ -1,8 +1,11 @@
 method: conv_onet
 data:
-  input_type: depth
+  input_type: depth_like
   classes: null
   path: data/ShapeNet/core
+  mesh_path: null
+  mesh_file: null
+  sample_upper_hemisphere: true
   pointcloud_n: 3000
   pointcloud_noise: 0.005
   points_subsample: 2048
@@ -27,9 +30,9 @@ model:
     hidden_size: 32
   c_dim: 32
 training:
-  pre_trained_weights: /home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_partial/model_best.pt
-  out_dir: out/pointcloud/shapenet_grid32_depth
-  batch_size: 16
+  pre_trained_weights: /home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_depth_like/model_best.pt
+  out_dir: out/pointcloud/shapenet_grid32_depth_like_upper
+  batch_size: 32
   model_selection_metric: iou
   model_selection_mode: maximize
   print_every: 100
@@ -39,7 +42,7 @@ training:
   backup_every: 10000
   n_workers: 8
   n_workers_val: 4
-  max_iter: 60000
+  max_iter: 100000
 test:
   threshold: 0.5
   eval_mesh: true

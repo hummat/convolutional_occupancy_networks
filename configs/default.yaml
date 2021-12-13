@@ -4,7 +4,8 @@ data:
   path: data/ShapeNet
   watertight_path: data/watertight
   mesh_path: /home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1
-  mesh_file: 'model.obj'
+  mesh_file: 'model.off'
+  sample_upper_hemisphere: false
   classes: null
   input_type: img
   part_ratio: 0.7
