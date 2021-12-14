@@ -3,11 +3,10 @@ import os
 from typing import Union, Tuple, List
 
 import numpy as np
-import pyrender
 import trimesh
 import open3d as o3d
 
-from src.common import coord2index, normalize_coord, as_mesh, get_rotation_from_point, sample_point_on_upper_hemisphere
+from src.common import coord2index, normalize_coord, look_at, get_rotation_from_point, sample_point_on_upper_hemisphere
 from src.data.core import Field
 from src.utils import binvox_rw
 from scipy.spatial.transform import Rotation
@@ -430,6 +429,7 @@ class DepthPointCloudField(Field):
         inv_camk = np.linalg.inv([[res_x, 0, res_x / 2], [0, res_y, res_y / 2], [0, 0, 1]])
         self.projection = (inv_camk @ coordinates).T
 
+        import pyrender
         import logging
         logger = logging.getLogger("trimesh")
         logger.setLevel(logging.ERROR)
@@ -499,14 +499,20 @@ class DepthLikePointCloudField(Field):
                  padding: float = 0,
                  upper_hemisphere: bool = False,
                  rotate_object: str = '',
-                 sample_camera: str = '',
+                 undo_rotation: bool = False,
+                 sample_camera_position: str = '',
+                 apply_camera_position: bool = True,
+
                  transform: Union[None, object] = None):
+        assert not (rotate_object and sample_camera_position)
         self.file_name = file_name
         self.num_points = num_points
         self.padding = padding
         self.upper_hemisphere = upper_hemisphere
         self.rotate_object = rotate_object
-        self.sample_camera = sample_camera
+        self.undo_rotation = undo_rotation
+        self.sample_camera_position = sample_camera_position
+        self.apply_camera_position = apply_camera_position
         self.transform = transform
 
     def load(self, model_path, idx, category):
@@ -529,21 +535,24 @@ class DepthLikePointCloudField(Field):
             mesh.scale(1 / scale, center=(0, 0, 0))
             pcd = mesh.sample_points_uniformly(100000)
 
+        rot = np.eye(3)
+        x_angle = None
         if self.rotate_object:
             angles = np.random.uniform(360, size=len(self.rotate_object) if len(self.rotate_object) > 1 else None)
             if self.upper_hemisphere and 'x' in self.rotate_object:
-                angles[list(self.rotate_object).index('x')] = np.random.uniform(0, 90)
+                x_angle = np.random.uniform(0, 90)
+                angles[list(self.rotate_object).index('x')] = x_angle
             rot = Rotation.from_euler(self.rotate_object, angles, degrees=True).as_matrix()
             trafo = np.eye(4)
             trafo[:3, :3] = rot
             pcd.transform(trafo)
 
         camera = [0, 0, 1]
-        if 'x' in self.sample_camera:
+        if 'x' in self.sample_camera_position:
             camera[0] = np.random.uniform(low=-1, high=1)
-        if 'y' in self.sample_camera:
+        if 'y' in self.sample_camera_position:
             camera[1] = np.random.uniform(low=0 if self.upper_hemisphere else -1, high=1)
-        if 'z' in self.sample_camera:
+        if 'z' in self.sample_camera_position:
             camera[2] = np.random.uniform(low=-1, high=1)
 
         camera /= np.linalg.norm(camera)
@@ -557,14 +566,23 @@ class DepthLikePointCloudField(Field):
             pcd = pcd.select_by_index(indices)
             points = np.asarray(pcd.points, dtype=np.float32)
 
+        if self.sample_camera_position:
+            rot = look_at(camera)[:3, :3]
+            rot_x = np.arctan2(rot[2, 1], rot[2, 2])
+            x_angle = np.rad2deg(rot_x - np.pi if rot_x > 0 else rot_x)
+            # rot_x = Rotation.from_euler('x', rot_x).as_matrix()
+            if self.apply_camera_position:
+                points = points @ rot
+        if self.rotate_object and self.undo_rotation:
+            points = points @ rot
+
         data = {
             None: points,
             'normals': np.zeros_like(points, dtype=np.float32),
+            'rot': rot,
+            'cam': camera,
+            'x_angle': x_angle
         }
-        if self.rotate_object:
-            data['rot'] = rot
-
-        data['cam'] = camera
 
         if self.transform is not None:
             data = self.transform(data)

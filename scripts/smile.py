@@ -16,7 +16,7 @@ from src import config, data
 from src.checkpoints import CheckpointIO
 from src.data import fields
 from src.eval import MeshEvaluator
-from src.common import sample_point_on_upper_hemisphere
+from src.common import look_at
 
 
 def load_mesh(file_path: str, process: bool = True, padding: float = 0.1):
@@ -175,46 +175,9 @@ def from_pointcloud(use_trimesh=True, visualize=True):
         mesh_pred.export("smile.off")
 
 
-def look_at(_from, _to=(0, 0, 0), _tmp=(0, 1, 0), return_vectors: bool = False) -> np.ndarray:
-    _tmp /= np.linalg.norm(_tmp)
-    forward = _from - _to
-    forward /= np.linalg.norm(forward)
-    right = np.cross(_tmp, forward)
-    right /= np.linalg.norm(right)
-    up = np.cross(forward, right)
-    up /= np.linalg.norm(up)
-
-    cam_to_world = np.eye(4)
-    cam_to_world[0, 0] = right[0]
-    cam_to_world[0, 1] = right[1]
-    cam_to_world[0, 2] = right[2]
-    cam_to_world[1, 0] = up[0]
-    cam_to_world[1, 1] = up[1]
-    cam_to_world[1, 2] = up[2]
-    cam_to_world[2, 0] = forward[0]
-    cam_to_world[2, 1] = forward[1]
-    cam_to_world[2, 2] = forward[2]
-
-    cam_to_world[3, 0] = _from[0]
-    cam_to_world[3, 1] = _from[1]
-    cam_to_world[3, 2] = _from[2]
-
-    if return_vectors:
-        return forward, right, up
-    return cam_to_world.T
-
-
-def apply_extrinsics(points: np.ndarray, extrinsics: np.ndarray) -> np.ndarray:
-    rot_xyz = look_at(extrinsics)[:3, :3]
-    rot_x = np.arctan2(rot_xyz[2, 1], rot_xyz[2, 2])
-    rot_x = rot_x - np.pi if rot_x > 0 else rot_x
-    rot_x = Rotation.from_euler('x', rot_x).as_matrix()
-    return points @ rot_xyz @ rot_x.T
-
-
 def data_test():
     # path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1/*/*")))
-    path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/occupancy_networks/ShapeNet/extra/02876657/*")))
+    path = np.array(sorted(glob.glob("/run/media/humt_ma/TRAVELER/occupancy_networks/extra/02876657/*")))
     # path = np.array([p.replace("occupancy_networks/ShapeNet/core", "ShapeNetCore.v1") for p in path])
     path = np.array([p for p in path if not p.endswith(".lst")])
     transform = [
@@ -224,8 +187,10 @@ def data_test():
     transform = transforms.Compose(transform)
     field = fields.DepthLikePointCloudField("pointcloud.npz",
                                             upper_hemisphere=True,
-                                            sample_camera='xyz',
-                                            rotate_object='',
+                                            sample_camera_position='',
+                                            apply_camera_position=False,
+                                            rotate_object='yx',
+                                            undo_rotation=True,
                                             transform=transform)  # 22.7s (mesh), 36.6s (pcd)
     field_gt = fields.PointCloudField("pointcloud.npz")
     # field = fields.DepthPointCloudField("model.off", upper_hemisphere=False, transform=transform)  # 41.7s
@@ -239,23 +204,31 @@ def data_test():
     np.random.seed(42)
     path = sorted(list(np.random.choice(path, size=10, replace=False)) * 10)
     res = Parallel(n_jobs=16)(delayed(field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
-    # cams = [r['point'] for r in res]
+    rots = [r["rot"] for r in res]
     cams = [r["cam"] for r in res]
-    # rot = [r["rot"] for r in res]
+    angles = [r["x_angle"] for r in res]
     res = [r[None] for r in res]
     count = sum([True if len(r) < 3000 else False for r in res])
     for i, p in enumerate(path):
-        points = res[i]
+        #rot_x = np.arctan2(rots[i][2, 1], rots[i][2, 2])
+        # rot_x = rot_x - np.pi if rot_x > 0 else rot_x
+        #print(np.rad2deg(rot_x), rot_x, angles[i])
+        rot_x = Rotation.from_euler('x', angles[i], degrees=True).as_matrix()
+
+        #points = res[i] @ rots[i] @ rot_x.T
+        points = res[i] @ rots[i].T @ rot_x
+        # points = res[i] @ rot_x
         # forward, right, up = look_at(cams[i - 1], return_vectors=True)
-        points = apply_extrinsics(points, cams[i])
 
         points_gt = field_gt.load(p, i, 0)[None]
-        points_gt = apply_extrinsics(points_gt, cams[i])
+        #points_gt = points_gt @ rots[i] @ rot_x.T
+        points_gt = points_gt @ rots[i].T @ rot_x
         #rot_z = Rotation.from_euler('z', rot_z).as_matrix()
         #points_gt = points_gt @ rot_z.T
 
         forward = [0, 0, 1]
         up = [0, 1, 0]
+        # forward, right, up = look_at(cams[i], return_frame=True)
         o3d.visualization.draw_geometries([o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points)),
                                            o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points_gt)).paint_uniform_color([0.8, 0.8, 0.8]),
                                            o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)],

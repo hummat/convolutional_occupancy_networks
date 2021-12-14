@@ -9,6 +9,38 @@ import trimesh
 from src.utils.libkdtree import KDTree
 
 
+def look_at(_from: Union[np.ndarray, List[float]],
+            _to: Union[np.ndarray, List[float]] = (0, 0, 0),
+            _tmp: Union[np.ndarray, List[float]] = (0, 1, 0),
+            return_frame: bool = False) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    _tmp /= np.linalg.norm(_tmp)
+    forward = np.array(_from - _to)
+    forward /= np.linalg.norm(forward)
+    right = np.cross(_tmp, forward)
+    right /= np.linalg.norm(right)
+    up = np.cross(forward, right)
+    up /= np.linalg.norm(up)
+
+    cam_to_world = np.eye(4)
+    cam_to_world[0, 0] = right[0]
+    cam_to_world[0, 1] = right[1]
+    cam_to_world[0, 2] = right[2]
+    cam_to_world[1, 0] = up[0]
+    cam_to_world[1, 1] = up[1]
+    cam_to_world[1, 2] = up[2]
+    cam_to_world[2, 0] = forward[0]
+    cam_to_world[2, 1] = forward[1]
+    cam_to_world[2, 2] = forward[2]
+
+    cam_to_world[3, 0] = _from[0]
+    cam_to_world[3, 1] = _from[1]
+    cam_to_world[3, 2] = _from[2]
+
+    if return_frame:
+        return forward, right, up
+    return cam_to_world.T
+
+
 def sample_point_on_upper_hemisphere(center: Union[List, Tuple, np.ndarray] = (0, 0, 0),
                                      radius: float = 1,
                                      direction: Union[List, Tuple, np.ndarray] = (0, 0, 1)) -> np.ndarray:
