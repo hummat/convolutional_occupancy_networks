@@ -6,10 +6,15 @@ import trimesh
 class Rotate(object):
     """ Data rotation transformation class.
 
-    It randomly rotates the point cloud.
+    It (randomly) rotates the point cloud.
     """
-    def __init__(self, random: bool = False, visualize: bool = False):
-        self.random = random
+    def __init__(self,
+                 to_cam_frame: bool = False,
+                 to_world_frame: bool = False,
+                 visualize: bool = False):
+        assert not (to_cam_frame and to_world_frame)
+        self.to_cam_frame = to_cam_frame
+        self.to_world_frame = to_world_frame
         self.visualize = visualize
 
     def __call__(self, data):
@@ -18,6 +23,9 @@ class Rotate(object):
         Args:
             data (dictionary): data dictionary
         """
+        if data.get('voxels') is not None or data.get('input_type') == 'voxels':
+            raise TypeError("Voxels in data which cannot be rotated.")
+
         data_out = data.copy()
 
         points = data.get('points')
@@ -29,32 +37,23 @@ class Rotate(object):
         pcd = data.get('pointcloud')
         pcd_normals = data.get('pointcloud.normals')
 
-        voxels = data.get('voxels')
-        voxel_input = data.get('input_type') == 'voxels'
-
-        if self.random:
-            rot = R.random().as_matrix()
+        if self.to_cam_frame:
+            rot = data.get('inputs.rot')
+        elif self.to_world_frame:
+            rot = data.get('inputs.rot')
+            x_angle = data.get('inputs.x_angle')
+            rot_x = R.from_euler('x', x_angle, degrees=True).as_matrix()
+            rot = rot_x.T @ rot
         else:
-            rot = np.random.permutation(np.eye(3)) * np.array([np.random.choice([-1, 1]),
-                                                               np.random.choice([-1, 1]),
-                                                               np.random.choice([-1, 1])])
-        data_out['rot'] = rot
-        for k, v in zip(['points', 'points_iou', 'inputs', 'inputs.normals', 'pointcloud', 'pointcloud.normals', 'voxels'],
-                        [points, points_iou, inputs, normals, pcd, pcd_normals, voxels]):
-            if v is not None:
-                if k == 'voxels' or (k == 'inputs' and voxel_input):
-                    trans = np.eye(4)
-                    trans[:3, :3] = rot
-                    if isinstance(v, np.ndarray):
-                        v = trimesh.voxel.VoxelGrid(trimesh.voxel.encoding.DenseEncoding(v.data))
-                    data_out[k] = v.apply_transform(trans).matrix.astype(np.float32)
-                data_out[k] = v @ rot
+            rot = R.random().as_matrix()
 
-                if self.visualize and k in ["points", "points_iou", "inputs", "pointcloud", "voxels"]:
-                    if k == 'voxels' or (k == 'inputs' and voxel_input):
-                        trimesh.voxel.VoxelGrid(trimesh.voxel.encoding.DenseEncoding(data_out[k])).show()
-                    else:
-                        trimesh.PointCloud(data_out[k]).show()
+        for k, v in zip(['points', 'points_iou', 'inputs', 'inputs.normals', 'pointcloud', 'pointcloud.normals'],
+                        [points, points_iou, inputs, normals, pcd, pcd_normals]):
+            if v is not None:
+                data_out[k] = (rot @ v.T).T.astype(np.float32)
+
+                if self.visualize and k in ["points", "points_iou", "inputs", "pointcloud"]:
+                    trimesh.PointCloud(data_out[k]).show()
         return data_out
 
 
@@ -114,6 +113,25 @@ class SubsamplePointcloud(object):
         return data_out
 
 
+class NormalizePointcloud(object):
+    def __init__(self, padding: float = 0):
+        self.padding = padding
+
+    def __call__(self, data):
+        data_out = data.copy()
+        points = data[None]
+
+        scale = (points.max(axis=0) - points.min(axis=0)).max() / (1 - self.padding)
+        loc = (points.max(axis=0) + points.min(axis=0)) / 2
+
+        points -= loc
+        points *= 1 / scale
+
+        data_out[None] = points.astype(np.float32)
+
+        return data_out
+
+
 class SubsamplePoints(object):
     """ Points subsampling transformation class.
 
@@ -138,10 +156,8 @@ class SubsamplePoints(object):
         data_out = data.copy()
         if isinstance(self.N, int):
             idx = np.random.randint(points.shape[0], size=self.N)
-            data_out.update({
-                None: points[idx, :],
-                'occ': occ[idx],
-            })
+            data_out.update({None: points[idx, :],
+                             'occ': occ[idx]})
         else:
             Nt_out, Nt_in = self.N
             occ_binary = (occ >= 0.5)
@@ -162,9 +178,7 @@ class SubsamplePoints(object):
             volume = occ_binary.sum() / len(occ_binary)
             volume = volume.astype(np.float32)
 
-            data_out.update({
-                None: points,
-                'occ': occ,
-                'volume': volume,
-            })
+            data_out.update({None: points,
+                             'occ': occ,
+                             'volume': volume})
         return data_out

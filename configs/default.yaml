@@ -21,7 +21,7 @@ data:
   model_file: model.off
   watertight_file: model_watertight.off
   img_folder: img
-  img_size: 224 
+  img_size: 224
   img_with_camera: false
   img_augment: false
   n_views: 24
@@ -30,11 +30,12 @@ data:
   pointcloud_n: 256
   pointcloud_target_n: 1024
   pointcloud_noise: 0.05
-  rotate:
+  rotate: false
   visualize: false
+  normalize: false
   voxels_file: 'model.binvox'
   padding: 0.1
-  occ_from_sdf:
+  occ_from_sdf: false
 model:
   decoder: simple
   encoder: resnet18
@@ -59,6 +60,8 @@ training:
   loss:
   validate_first: false
   max_iter:
+  in_cam_coords: false
+  in_world_coords: false
 test:
   threshold: 0.5
   eval_mesh: true

@@ -114,7 +114,7 @@ class PointsField(Field):
 
     """
 
-    def __init__(self, file_name, transform=None, unpackbits=False, multi_files=None, occ_from_sdf=None):
+    def __init__(self, file_name, transform=None, unpackbits=False, multi_files=None, occ_from_sdf=False):
         self.file_name = file_name
         self.transform = transform
         self.unpackbits = unpackbits
@@ -409,12 +409,10 @@ class DepthPointCloudField(Field):
     def __init__(self,
                  file_name: str,
                  size: int = 224,
-                 padding: float = 0,
                  num_points: int = 3000,
                  upper_hemisphere: bool = False,
                  transform: Union[None, object] = None):
         self.file_name = file_name
-        self.padding = padding
         self.num_points = num_points
         self.upper_hemisphere = upper_hemisphere
         self.transform = transform
@@ -439,7 +437,7 @@ class DepthPointCloudField(Field):
 
         # Load & Normalize
         mesh = trimesh.load(file_path, process=False)
-        scale = (mesh.bounds[1] - mesh.bounds[0]).max() / (1 - self.padding)
+        scale = (mesh.bounds[1] - mesh.bounds[0]).max()
         loc = (mesh.bounds[1] + mesh.bounds[0]) / 2
         mesh.apply_translation(-loc)
         mesh.apply_scale(1 / scale)
@@ -496,23 +494,16 @@ class DepthLikePointCloudField(Field):
     def __init__(self,
                  file_name: str,
                  num_points: int = 3000,
-                 padding: float = 0,
                  upper_hemisphere: bool = False,
                  rotate_object: str = '',
-                 undo_rotation: bool = False,
                  sample_camera_position: str = '',
-                 apply_camera_position: bool = True,
-
                  transform: Union[None, object] = None):
         assert not (rotate_object and sample_camera_position)
         self.file_name = file_name
         self.num_points = num_points
-        self.padding = padding
         self.upper_hemisphere = upper_hemisphere
         self.rotate_object = rotate_object
-        self.undo_rotation = undo_rotation
         self.sample_camera_position = sample_camera_position
-        self.apply_camera_position = apply_camera_position
         self.transform = transform
 
     def load(self, model_path, idx, category):
@@ -528,8 +519,7 @@ class DepthLikePointCloudField(Field):
             pcd.points = o3d.utility.Vector3dVector(points)
         else:
             mesh = o3d.io.read_triangle_mesh(file_path, enable_post_processing=False)
-            size = mesh.get_max_bound() - mesh.get_min_bound()
-            scale = size.max() / (1 - self.padding)
+            scale = (mesh.get_max_bound() - mesh.get_min_bound()).max()
             loc = (mesh.get_max_bound() + mesh.get_min_bound()) / 2
             mesh.translate(-loc)
             mesh.scale(1 / scale, center=(0, 0, 0))
@@ -568,16 +558,14 @@ class DepthLikePointCloudField(Field):
 
         if self.sample_camera_position:
             rot = look_at(camera)[:3, :3]
-            rot_x = np.arctan2(rot[2, 1], rot[2, 2])
-            x_angle = np.rad2deg(rot_x - np.pi if rot_x > 0 else rot_x)
-            # rot_x = Rotation.from_euler('x', rot_x).as_matrix()
-            if self.apply_camera_position:
-                points = points @ rot
-        if self.rotate_object and self.undo_rotation:
-            points = points @ rot
+            x_angle = np.arctan2(rot[2, 1], rot[2, 2])
+            x_angle = -np.rad2deg(x_angle - np.pi if x_angle > 0 else x_angle)
+            rot = rot.T
+        elif self.rotate_object:
+            points = (rot.T @ points.T).T
 
         data = {
-            None: points,
+            None: points.astype(np.float32),
             'normals': np.zeros_like(points, dtype=np.float32),
             'rot': rot,
             'cam': camera,

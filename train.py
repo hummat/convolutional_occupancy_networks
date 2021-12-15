@@ -19,9 +19,7 @@ from collections import defaultdict
 import shutil
 
 # Arguments
-parser = argparse.ArgumentParser(
-    description='Train a 3D reconstruction model.'
-)
+parser = argparse.ArgumentParser(description='Train a 3D reconstruction model.')
 parser.add_argument('config', type=str, help='Path to config file.')
 parser.add_argument('--no-cuda', action='store_true', help='Do not use cuda.')
 parser.add_argument('--exit-after', type=int, default=-1,
@@ -63,12 +61,12 @@ shutil.copyfile(args.config, os.path.join(out_dir, 'config.yaml'))
 train_dataset = config.get_dataset('train', cfg)
 val_dataset = config.get_dataset('val', cfg, return_idx=True)
 
+print("Loading data. This will take some time.")
 train_loader = torch.utils.data.DataLoader(train_dataset,
                                            batch_size=batch_size,
                                            num_workers=cfg['training']['n_workers'],
                                            shuffle=True,
                                            collate_fn=data.collate_remove_none,
-                                           pin_memory=True,
                                            worker_init_fn=data.worker_init_reset_seed)
 
 val_loader = torch.utils.data.DataLoader(val_dataset,
@@ -76,7 +74,6 @@ val_loader = torch.utils.data.DataLoader(val_dataset,
                                          num_workers=cfg['training']['n_workers_val'],
                                          shuffle=False,
                                          collate_fn=data.collate_remove_none,
-                                         pin_memory=True,
                                          worker_init_fn=data.worker_init_reset_seed)
 
 # For visualizations
@@ -84,7 +81,6 @@ vis_loader = torch.utils.data.DataLoader(val_dataset,
                                          batch_size=1,
                                          shuffle=False,
                                          collate_fn=data.collate_remove_none,
-                                         pin_memory=True,
                                          worker_init_fn=data.worker_init_reset_seed)
 model_counter = defaultdict(int)
 data_vis_list = []

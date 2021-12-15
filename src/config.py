@@ -13,13 +13,13 @@ method_dict = {
 def load_config(path, default_path=None):
     """ Loads config file.
 
-    Args:  
+    Args:
         path (str): mesh_path to config file
         default_path (str): use default mesh_path
     """
     # Load configuration from file itself
     with open(path, 'r') as f:
-        cfg_special = yaml.load(f)
+        cfg_special = yaml.safe_load(f)
 
     # Check if we should inherit from a config
     inherit_from = cfg_special.get('inherit_from')
@@ -30,7 +30,7 @@ def load_config(path, default_path=None):
         cfg = load_config(inherit_from, default_path)
     elif default_path is not None:
         with open(default_path, 'r') as f:
-            cfg = yaml.load(f)
+            cfg = yaml.safe_load(f)
     else:
         cfg = dict()
 
@@ -136,12 +136,27 @@ def get_dataset(mode, cfg, return_idx=False):
         if return_idx:
             fields['idx'] = data.IndexField()
 
+        transform = list()
+        if cfg['data']['input_type'] in ['depth', 'depth_like']:
+            visualize = cfg['data']['visualize']
+            if cfg['training']['in_cam_coords']:
+                print(f"{split} data will be transformed to (sampled) camera coordinates.")
+                transform.append(data.Rotate(to_cam_frame=True,
+                                             visualize=visualize))
+            elif cfg['training']['in_world_coords']:
+                print(f"{split} data will be transformed to (virtual) world coordinates.")
+                transform.append(data.Rotate(to_world_frame=True,
+                                             visualize=visualize))
+        if cfg['data']['rotate']:
+            print(f"{split} data will be rotated randomly.")
+            transform.append(data.Rotate())
+
         dataset = data.Shapes3dDataset(
             dataset_folder,
             fields,
             split=split,
             categories=categories,
-            transform=data.Rotate(visualize=cfg['data']['visualize']) if cfg['data']['rotate'] else None,
+            transform=transforms.Compose(transform) if transform else None,
             cfg=cfg)
     else:
         raise ValueError('Invalid dataset "%s"' % cfg['data']['dataset'])
@@ -157,10 +172,11 @@ def get_inputs_field(cfg):
     """
     input_type = cfg['data']['input_type']
 
-    transform = [
-        data.SubsamplePointcloud(cfg['data']['pointcloud_n']),
-        data.PointcloudNoise(cfg['data']['pointcloud_noise'])
-    ]
+    transform = [data.SubsamplePointcloud(cfg['data']['pointcloud_n']),
+                 data.PointcloudNoise(cfg['data']['pointcloud_noise'])]
+    if cfg['data']['normalize']:
+        print("Input data will be normalized.")
+        transform.append(data.NormalizePointcloud())
     transform = transforms.Compose(transform)
 
     if input_type is None:
@@ -177,6 +193,7 @@ def get_inputs_field(cfg):
     elif input_type == 'depth_like':
         inputs_field = data.DepthLikePointCloudField(cfg['data']['mesh_file'] if cfg['data']['mesh_file'] else cfg['data']['pointcloud_file'],
                                                      num_points=cfg['data']['pointcloud_n'],
+                                                     rotate_object='yx',
                                                      upper_hemisphere=cfg['data']['sample_upper_hemisphere'],
                                                      transform=transform)
     elif input_type == 'depth':

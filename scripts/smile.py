@@ -2,6 +2,7 @@ import copy
 import glob
 import os
 import time
+import sys
 
 import numpy as np
 import torch
@@ -12,9 +13,10 @@ import open3d as o3d
 from joblib import Parallel, delayed
 from scipy.spatial.transform import Rotation
 
+sys.path.append("")
 from src import config, data
 from src.checkpoints import CheckpointIO
-from src.data import fields
+from src.data import fields, seed_all_rng
 from src.eval import MeshEvaluator
 from src.common import look_at
 
@@ -176,8 +178,9 @@ def from_pointcloud(use_trimesh=True, visualize=True):
 
 
 def data_test():
+    seed_all_rng(42)
     # path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1/*/*")))
-    path = np.array(sorted(glob.glob("/run/media/humt_ma/TRAVELER/occupancy_networks/extra/02876657/*")))
+    path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/occupancy_networks/ShapeNet/extra/02876657/*")))
     # path = np.array([p.replace("occupancy_networks/ShapeNet/core", "ShapeNetCore.v1") for p in path])
     path = np.array([p for p in path if not p.endswith(".lst")])
     transform = [
@@ -185,47 +188,29 @@ def data_test():
         data.PointcloudNoise(0.005)
     ]
     transform = transforms.Compose(transform)
-    field = fields.DepthLikePointCloudField("pointcloud.npz",
-                                            upper_hemisphere=True,
-                                            sample_camera_position='',
-                                            apply_camera_position=False,
-                                            rotate_object='yx',
-                                            undo_rotation=True,
-                                            transform=transform)  # 22.7s (mesh), 36.6s (pcd)
-    field_gt = fields.PointCloudField("pointcloud.npz")
-    # field = fields.DepthPointCloudField("model.off", upper_hemisphere=False, transform=transform)  # 41.7s
-    #cams = []
-    #for _ in range(1000):
-    #    cams.append(sample_point_on_upper_hemisphere(direction=(0, 1, 0)))
+    input_field = fields.DepthLikePointCloudField("pointcloud.npz",
+                                                  upper_hemisphere=True,
+                                                  sample_camera_position='',
+                                                  rotate_object='yx',
+                                                  transform=transform)  # 22.7s (mesh), 36.6s (pcd)
+    pointcloud_field = fields.PointCloudField("pointcloud.npz")
+    points_field = fields.PointsField("points.npz", unpackbits=True)
+    rotate = data.Rotate(to_cam_frame=True, visualize=True)
 
-    # field = fields.PartialPointCloudField("pointcloud.npz")
-    start = time.time()
-    counter = 0
-    np.random.seed(42)
     path = sorted(list(np.random.choice(path, size=10, replace=False)) * 10)
-    res = Parallel(n_jobs=16)(delayed(field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
-    rots = [r["rot"] for r in res]
-    cams = [r["cam"] for r in res]
-    angles = [r["x_angle"] for r in res]
-    res = [r[None] for r in res]
-    count = sum([True if len(r) < 3000 else False for r in res])
-    for i, p in enumerate(path):
-        #rot_x = np.arctan2(rots[i][2, 1], rots[i][2, 2])
-        # rot_x = rot_x - np.pi if rot_x > 0 else rot_x
-        #print(np.rad2deg(rot_x), rot_x, angles[i])
-        rot_x = Rotation.from_euler('x', angles[i], degrees=True).as_matrix()
+    inputs = Parallel(n_jobs=16)(delayed(input_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
+    pointclouds = Parallel(n_jobs=16)(delayed(pointcloud_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
+    points = Parallel(n_jobs=16)(delayed(points_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
+    for i, (inp, pcd, point) in enumerate(zip(inputs, pointclouds, points)):
+        data_fields = {"inputs": inp[None],
+                       "inputs.rot": inp["rot"],
+                       "inputs.x_angle": inp["x_angle"],
+                       "pointcloud": pcd[None],
+                       "points": point[None]}
 
-        #points = res[i] @ rots[i] @ rot_x.T
-        points = res[i] @ rots[i].T @ rot_x
-        # points = res[i] @ rot_x
-        # forward, right, up = look_at(cams[i - 1], return_vectors=True)
+        rotate(data_fields)
 
-        points_gt = field_gt.load(p, i, 0)[None]
-        #points_gt = points_gt @ rots[i] @ rot_x.T
-        points_gt = points_gt @ rots[i].T @ rot_x
-        #rot_z = Rotation.from_euler('z', rot_z).as_matrix()
-        #points_gt = points_gt @ rot_z.T
-
+        """
         forward = [0, 0, 1]
         up = [0, 1, 0]
         # forward, right, up = look_at(cams[i], return_frame=True)
@@ -237,20 +222,25 @@ def data_test():
                                           lookat=[0, 0, 0],
                                           front=forward,
                                           up=up)
-        # view.set_caption(path[i].split('/')[-2])
-    # for i in range(10, len(res), 10):
-    #     points = np.concatenate(res[i - 10:i])
-    #     pcd = trimesh.PointCloud(np.concatenate([points, cams]))
-    #     print(pcd.bounds[1], pcd.bounds[0])
-    #     pcd.show()
-    # for r, p in zip(res, path):
-    #     t = np.eye(4)
-    #     t[:3, :3] = r
-    #     mesh = trimesh.load(os.path.join(p, "model.off"), process=False)
-    #     mesh = mesh.apply_transform(t)
-    #     mesh.show()
-    #     # print(pcd.bounds[1], pcd.bounds[0])
-    print(time.time() - start, count / len(path))
+        """
+
+
+def loader_test():
+    cfg = config.load_config(os.path.abspath('configs/pointcloud/shapenet_grid32_depth_like_upper.yaml'), 'configs/default.yaml')
+    cfg['data']['path'] = 'data/ShapeNet/extra'
+    cfg['data']['classes'] = ['02876657']
+    val_dataset = config.get_dataset('val', cfg, return_idx=True)
+
+    val_loader = torch.utils.data.DataLoader(val_dataset,
+                                             batch_size=1,
+                                             num_workers=cfg['training']['n_workers_val'],
+                                             shuffle=False,
+                                             collate_fn=data.collate_remove_none,
+                                             worker_init_fn=data.worker_init_reset_seed)
+
+    for _ in range(3):
+        for _ in tqdm.tqdm(val_loader):
+            pass
 
 
 if __name__ == "__main__":
