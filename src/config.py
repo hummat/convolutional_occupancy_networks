@@ -151,7 +151,7 @@ def get_dataset(mode, cfg, return_idx=False):
         if cfg['data']['scale']:
             scale = cfg['data']['scale']
             if not isinstance(scale, (tuple, list)):
-               scale = (0.05, 0.5) 
+                scale = (0.05, 0.5)
             transform.append(data.RandomScale(scale))
         if cfg['data']['normalize']:
             norm = cfg['data']['normalize']
