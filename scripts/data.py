@@ -227,13 +227,13 @@ def eval_agile():
     # o3d.visualization.draw_geometries([voxel_grid])
 
 
-def obj_to_off(meshes):
+def convert(meshes: List[str], in_format: str = ".off", out_format: str = ".ply"):
     def run(mesh):
-        command = f"meshlabserver -i {mesh} -o {mesh.replace('obj', 'off')}"
+        command = f"meshlabserver -i {mesh} -o {mesh.replace(in_format, out_format)}"
         subprocess.run(command.split(' '), stdout=subprocess.DEVNULL)
 
     with Parallel(n_jobs=cpu_count()) as parallel:
-        parallel(delayed(run)(mesh) for mesh in meshes)
+        parallel(delayed(run)(mesh) for mesh in tqdm.tqdm(meshes))
 
 
 def edges_to_lineset(mesh, edges, color):
@@ -350,4 +350,5 @@ def mesh_test():
 
 
 if __name__ == "__main__":
-    mesh_test()
+    meshes = glob.glob("/home/matthias/Data/Ubuntu/git/occupancy_networks/data/ShapeNet.build/02876657/4_watertight_scaled/*.off")
+    convert(meshes)

@@ -12,6 +12,7 @@ import trimesh
 import open3d as o3d
 from joblib import Parallel, delayed
 from scipy.spatial.transform import Rotation
+from easy_o3d.utils import eval_data, draw_geometries, process_point_cloud, OutlierTypes
 
 sys.path.append("")
 from src import config, data
@@ -245,5 +246,22 @@ def loader_test():
             pass
 
 
+def depth_test():
+    data = np.load("/home/matthias/Data2/datasets/shapenet/depth/1a7ba1f4c892e2da30711cdbdbc73924/shard0.npz")
+    depth = data["depth"][10]
+    print(depth.min(), depth.max(), depth.shape)
+    mask = np.zeros_like(depth).astype(bool)
+    mask[depth < depth.max()] = True
+    extrinsic = data["cameras"][10]
+    print(extrinsic)
+    depth = eval_data(depth * mask,
+                      camera_intrinsic=[640, 0, 320,
+                                        0, 640, 240],
+                      camera_extrinsic=extrinsic,
+                      depth_trunc=3.0)
+    depth = process_point_cloud(depth, estimate_normals=True)
+    draw_geometries([depth, o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)])
+
+
 if __name__ == "__main__":
-    data_test()
+    depth_test()
