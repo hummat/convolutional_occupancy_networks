@@ -3,5 +3,5 @@ data:
   voxels_file: null
 training:
   pre_trained_weights: /home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_depth_like_upper/model_100000.pt
-  out_dir: out/pointcloud/shapenet_grid32_depth_like_world
-  in_world_coords: true
+  out_dir: out/pointcloud/shapenet_grid32_depth_like_cam
+  in_cam_coords: true
