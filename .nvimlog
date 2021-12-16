@@ -1,0 +1,7 @@
+WARN  2021-12-15T17:48:19.350 14479 log_path_init:96: Failed to create directory /run/user/123036 for writing logs: Unknown system error 1
+WARN  2021-12-15T17:48:56.745 14602 log_path_init:96: Failed to create directory /run/user/123036 for writing logs: Unknown system error 1
+WARN  2021-12-15T17:49:39.245 14735 log_path_init:96: Failed to create directory /run/user/123036 for writing logs: Unknown system error 1
+WARN  2021-12-15T18:27:57.690 18320 log_path_init:96: Failed to create directory /run/user/123036 for writing logs: Unknown system error 1
+WARN  2021-12-15T18:29:27.859 18633 log_path_init:96: Failed to create directory /run/user/123036 for writing logs: Unknown system error 1
+WARN  2021-12-15T18:30:56.381 19120 log_path_init:96: Failed to create directory /run/user/123036 for writing logs: Unknown system error 1
+WARN  2021-12-16T09:26:17.017 2435  log_path_init:96: Failed to create directory /run/user/123036 for writing logs: Unknown system error 1

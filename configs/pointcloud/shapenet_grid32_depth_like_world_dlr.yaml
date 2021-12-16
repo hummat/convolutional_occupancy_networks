@@ -1,0 +1,9 @@
+inherit_from: configs/pointcloud/shapenet_grid32_depth_like_upper.yaml
+data:
+  normalize: true
+  voxels_file: null
+training:
+  pre_trained_weights: /net/rmc-lx0038/home_local/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_depth_like_upper/model_100000.pt
+  out_dir: out/pointcloud/shapenet_grid32_depth_like_world
+  in_world_coords: true
+

@@ -1,0 +1,9 @@
+inherit_from: configs/pointcloud/shapenet_grid32_depth_like_upper.yaml
+data:
+  normalize: center
+  scale: true
+  voxels_file: null
+training:
+  pre_trained_weights:
+  out_dir: out/pointcloud/shapenet_grid32_depth_like_world_scale
+  in_world_coords: true
