@@ -121,6 +121,7 @@ try:
 except FileExistsError:
     load_dict = dict()
 if weights is not None and not load_dict:
+    weights = os.path.abspath(weights)
     print("Loading pre-trained weights from ", weights)
     checkpoint_io.load(weights)
 epoch_it = load_dict.get('epoch_it', 0)
