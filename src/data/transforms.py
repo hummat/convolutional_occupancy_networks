@@ -157,7 +157,8 @@ class RandomScale(object):
 
         for k, v in zip(["points", "pointcloud", "inputs"],
                         [points, pointcloud, inputs]):
-            data_out[k] = (v * scale).astype(np.float32)
+            if v is not None:
+                data_out[k] = (v * scale).astype(np.float32)
             
         return data_out
 
