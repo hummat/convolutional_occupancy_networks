@@ -122,6 +122,7 @@ def get_dataset(mode, cfg, return_idx=False):
     }
 
     split = splits[mode]
+    print(f"Loading {split} data")
 
     # Create dataset
     if dataset_type == 'Shapes3D':
@@ -140,16 +141,25 @@ def get_dataset(mode, cfg, return_idx=False):
         if cfg['data']['input_type'] in ['depth', 'depth_like']:
             visualize = cfg['data']['visualize']
             if cfg['training']['in_cam_coords']:
-                print(f"{split} data will be transformed to (sampled) camera coordinates.")
                 transform.append(data.Rotate(to_cam_frame=True,
                                              visualize=visualize))
             elif cfg['training']['in_world_coords']:
-                print(f"{split} data will be transformed to (virtual) world coordinates.")
                 transform.append(data.Rotate(to_world_frame=True,
                                              visualize=visualize))
         if cfg['data']['rotate']:
-            print(f"{split} data will be rotated randomly.")
             transform.append(data.Rotate())
+        if cfg['data']['scale']:
+            scale = cfg['data']['scale']
+            if not isinstance(scale, (tuple, list)):
+               scale = (0.05, 0.5) 
+            transform.append(data.RandomScale(scale))
+        if cfg['data']['normalize']:
+            norm = cfg['data']['normalize']
+            if isinstance(norm, str):
+                norm = norm.lower()
+            else:
+                norm = 'center_scale'
+            transform.append(data.NormalizeInputs(center='center' in norm, scale='scale' in norm))
 
         dataset = data.Shapes3dDataset(
             dataset_folder,
@@ -174,9 +184,6 @@ def get_inputs_field(cfg):
 
     transform = [data.SubsamplePointcloud(cfg['data']['pointcloud_n']),
                  data.PointcloudNoise(cfg['data']['pointcloud_noise'])]
-    if cfg['data']['normalize']:
-        print("Input data will be normalized.")
-        transform.append(data.NormalizePointcloud())
     transform = transforms.Compose(transform)
 
     if input_type is None:

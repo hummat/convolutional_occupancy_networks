@@ -24,20 +24,19 @@ parser.add_argument('config', type=str, help='Path to config file.')
 parser.add_argument('--no-cuda', action='store_true', help='Do not use cuda.')
 parser.add_argument('--exit-after', type=int, default=-1,
                     help='Checkpoint and exit after specified number of seconds with exit code 3.')
+parser.add_argument('--weights', type=str, help="Path to weights.")
 
 args = parser.parse_args()
 cfg = config.load_config(args.config, 'configs/default.yaml')
 is_cuda = (torch.cuda.is_available() and not args.no_cuda)
 device = torch.device("cuda" if is_cuda else "cpu")
-# Set t0
 t0 = time.time()
 
 # Shorthands
 out_dir = cfg['training']['out_dir']
 batch_size = cfg['training']['batch_size']
 backup_every = cfg['training']['backup_every']
-# weights = os.path.join("/home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks", cfg['training']['pre_trained_weights'])
-weights = cfg['training']['pre_trained_weights']
+weights = args.weights if args.weights else cfg['training']['pre_trained_weights']
 vis_n_outputs = cfg['generation']['vis_n_outputs']
 validate_first = cfg['training']['validate_first']
 max_iter = cfg['training']['max_iter']
@@ -61,7 +60,6 @@ shutil.copyfile(args.config, os.path.join(out_dir, 'config.yaml'))
 train_dataset = config.get_dataset('train', cfg)
 val_dataset = config.get_dataset('val', cfg, return_idx=True)
 
-print("Loading data. This will take some time.")
 train_loader = torch.utils.data.DataLoader(train_dataset,
                                            batch_size=batch_size,
                                            num_workers=cfg['training']['n_workers'],

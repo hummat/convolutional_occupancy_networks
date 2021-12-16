@@ -8,7 +8,7 @@ from src.data.fields import (
 )
 from src.data.transforms import (
     PointcloudNoise, SubsamplePointcloud,
-    SubsamplePoints, Rotate, NormalizePointcloud
+    SubsamplePoints, Rotate, NormalizeInputs, RandomScale
 )
 
 __all__ = [
@@ -30,5 +30,6 @@ __all__ = [
     SubsamplePointcloud,
     SubsamplePoints,
     Rotate,
-    NormalizePointcloud
+    NormalizeInputs,
+    RandomScale
 ]

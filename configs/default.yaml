@@ -31,8 +31,9 @@ data:
   pointcloud_target_n: 1024
   pointcloud_noise: 0.05
   rotate: false
-  visualize: false
+  scale: false
   normalize: false
+  visualize: false
   voxels_file: 'model.binvox'
   padding: 0.1
   occ_from_sdf: false

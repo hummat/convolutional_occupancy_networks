@@ -195,7 +195,11 @@ def data_test():
                                                   transform=transform)  # 22.7s (mesh), 36.6s (pcd)
     pointcloud_field = fields.PointCloudField("pointcloud.npz")
     points_field = fields.PointsField("points.npz", unpackbits=True)
-    rotate = data.Rotate(to_cam_frame=True, visualize=True)
+
+    data_transform = transforms.Compose([data.Rotate(to_world_frame=True),
+                                         data.RandomScale(),
+                                         data.NormalizeInputs(scale=False)])
+
 
     path = sorted(list(np.random.choice(path, size=10, replace=False)) * 10)
     inputs = Parallel(n_jobs=16)(delayed(input_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
@@ -207,10 +211,9 @@ def data_test():
                        "inputs.x_angle": inp["x_angle"],
                        "pointcloud": pcd[None],
                        "points": point[None]}
+        input_data = data_transform(data_fields)
+        points, points_gt = input_data["inputs"], input_data["pointcloud"]
 
-        rotate(data_fields)
-
-        """
         forward = [0, 0, 1]
         up = [0, 1, 0]
         # forward, right, up = look_at(cams[i], return_frame=True)
@@ -222,7 +225,6 @@ def data_test():
                                           lookat=[0, 0, 0],
                                           front=forward,
                                           up=up)
-        """
 
 
 def loader_test():

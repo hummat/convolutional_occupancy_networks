@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import trimesh
@@ -13,6 +15,7 @@ class Rotate(object):
                  to_world_frame: bool = False,
                  visualize: bool = False):
         assert not (to_cam_frame and to_world_frame)
+        print("Rotating data")
         self.to_cam_frame = to_cam_frame
         self.to_world_frame = to_world_frame
         self.visualize = visualize
@@ -68,6 +71,7 @@ class PointcloudNoise(object):
     """
 
     def __init__(self, stddev: float):
+        print(f"Adding noise to pointcloud (STD={stddev})")
         self.stddev = stddev
 
     def __call__(self, data):
@@ -94,6 +98,7 @@ class SubsamplePointcloud(object):
     """
 
     def __init__(self, N):
+        print(f"Subsampling pointcloud (N={N})")
         self.N = N
 
     def __call__(self, data):
@@ -113,22 +118,47 @@ class SubsamplePointcloud(object):
         return data_out
 
 
-class NormalizePointcloud(object):
-    def __init__(self, padding: float = 0):
-        self.padding = padding
+class NormalizeInputs(object):
+    def __init__(self, center: bool = True, scale: bool = True):
+        print(f"Normalizing inputs (centering: {center}, scaling: {scale})")
+        self.center = center
+        self.scale = scale
 
     def __call__(self, data):
         data_out = data.copy()
-        points = data[None]
+        points = data["inputs"]
 
-        scale = (points.max(axis=0) - points.min(axis=0)).max() / (1 - self.padding)
+        scale = (points.max(axis=0) - points.min(axis=0)).max()
         loc = (points.max(axis=0) + points.min(axis=0)) / 2
 
-        points -= loc
-        points *= 1 / scale
+        if self.center:
+            points -= loc
+        if self.scale:
+            points *= 1 / scale
 
-        data_out[None] = points.astype(np.float32)
+        data_out["inputs"] = points.astype(np.float32)
 
+        return data_out
+
+
+class RandomScale(object):
+    def __init__(self, scale_range: Tuple[float, float] = (0.05, 0.5)):
+        print(f"Randomly scaling data (range={scale_range})")
+        self.scale_range = scale_range
+
+    def __call__(self, data):
+        data_out = data.copy()
+
+        points = data.get("points")
+        pointcloud = data.get("pointcloud")
+        inputs = data.get("inputs")
+
+        scale = np.random.uniform(*self.scale_range)
+
+        for k, v in zip(["points", "pointcloud", "inputs"],
+                        [points, pointcloud, inputs]):
+            data_out[k] = (v * scale).astype(np.float32)
+            
         return data_out
 
 
@@ -142,6 +172,7 @@ class SubsamplePoints(object):
     """
 
     def __init__(self, N):
+        print(f"Subsampling points (N={N})")
         self.N = N
 
     def __call__(self, data):
