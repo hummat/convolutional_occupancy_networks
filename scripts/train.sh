@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-SLURM_HOME="/net/rmc-gpu03/home_local/humt_ma"
-export PYENV_ROOT="$SLURM_HOME/.pyenv"
+USERSTORE="/volume/USERSTORE/humt_ma"
+export PYENV_ROOT="$USERSTORE/.pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
 export PATH="$PYENV_ROOT/shims:$PATH"
 eval "$(pyenv init --path)"
@@ -9,8 +9,6 @@ if command -v pyenv >/dev/null; then eval "$(pyenv init -)"; fi
 export PYENV_VIRTUALENV_DISABLE_PROMPT=1
 
 pyenv activate conv_onet 
-
-USERSTORE="/volume/USERSTORE/humt_ma"
 export LD_LIBRARY_PATH="$USERSTORE/glibc/build/math:$LD_LIBRARY_PATH"
 
 echo "=====Job Infos ===="
