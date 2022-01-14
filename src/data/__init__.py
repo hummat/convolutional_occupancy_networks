@@ -4,11 +4,11 @@ from src.data.core import (
 from src.data.fields import (
     IndexField, PointsField,
     VoxelsField, PatchPointsField, PointCloudField, PatchPointCloudField, PartialPointCloudField,
-    DepthLikePointCloudField, DepthPointCloudField
+    DepthLikePointCloudField, PyrenderDepthPointCloudField, BlenderProcDepthPointCloudField
 )
 from src.data.transforms import (
     PointcloudNoise, SubsamplePointcloud,
-    SubsamplePoints, Rotate, NormalizeInputs, RandomScale
+    SubsamplePoints, Rotate, Normalize, Scale
 )
 
 __all__ = [
@@ -30,6 +30,6 @@ __all__ = [
     SubsamplePointcloud,
     SubsamplePoints,
     Rotate,
-    NormalizeInputs,
-    RandomScale
+    Normalize,
+    Scale
 ]

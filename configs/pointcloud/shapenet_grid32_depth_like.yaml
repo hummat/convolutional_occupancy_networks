@@ -3,6 +3,8 @@ data:
   input_type: depth_like
   classes: null
   path: data/ShapeNet/core
+  mesh_path: null
+  mesh_file: null
   pointcloud_n: 3000
   pointcloud_noise: 0.005
   points_subsample: 2048

@@ -405,7 +405,63 @@ class PartialPointCloudField(Field):
         return complete
 
 
-class DepthPointCloudField(Field):
+class BlenderProcDepthPointCloudField(Field):
+    def __init__(self, transform=None, unscale: bool = True):
+        self.transform = transform
+        self.unscale = unscale
+
+    def load(self, model_path, idx, category):
+        shard = np.random.randint(10)
+        file = np.random.randint(100)
+        file_path = os.path.join(model_path,
+                                 "train_pbr",
+                                 str(shard).zfill(6),
+                                 "points",
+                                 str(file).zfill(6) + ".npz")
+        data = np.load(file_path)
+
+        points = data["points"]
+        cam = data["cam"]  # Blender world to camera transformation
+        scale = data["scale"]
+
+        swap_xy = np.array([[0, 1, 0],
+                            [1, 0, 0],
+                            [0, 0, -1]])
+        swap_yz = np.array([[1, 0, 0],
+                            [0, 0, 1],
+                            [0, -1, 0]])
+        rot = cam[:3, :3]  # Blender world to camera rotation (rotates points from world to camera frame)
+        trans = cam[:3, 3]  # Camera location in camera coordinates
+
+        camera = -rot.T @ trans  # Camera location in Blender world coordinates
+        camera = swap_yz @ camera  # Camera location in ShapeNet coordinates
+
+        # Apply camera extrinsics (Transform points from camera to Blender world coordinate frame)
+        points = (rot.T @ points.T).T - rot.T @ trans
+        points = (swap_yz @ points.T).T  # Change Blender to ShapeNet coordinate frame
+
+        rot = swap_xy @ rot @ swap_yz.T  # Shapenet to camera rotation (rotates points from ShapeNet to camera frame)
+        x_angle = np.arctan2(rot.T[2, 1], rot.T[2, 2])
+        x_angle = -np.rad2deg(x_angle - np.pi if x_angle > 0 else x_angle)  # Todo: why?
+
+        if self.unscale:
+            points /= scale
+
+        data = {
+            None: points.astype(np.float32),
+            'normals': np.zeros_like(points, dtype=np.float32),
+            'rot': rot,
+            'cam': camera,
+            'x_angle': x_angle
+        }
+
+        if self.transform is not None:
+            data = self.transform(data)
+
+        return data
+
+
+class PyrenderDepthPointCloudField(Field):
     def __init__(self,
                  file_name: str,
                  size: int = 224,
@@ -550,11 +606,11 @@ class DepthLikePointCloudField(Field):
         _, indices = pcd.hidden_point_removal(camera, 100)
 
         # Not enough points
-        if len(indices) < self.num_points:
-            points = np.asarray(pcd.points, dtype=np.float32)
-        else:
-            pcd = pcd.select_by_index(indices)
-            points = np.asarray(pcd.points, dtype=np.float32)
+        # if len(indices) < self.num_points:
+        #     points = np.asarray(pcd.points, dtype=np.float32)
+        # else:
+        pcd = pcd.select_by_index(indices)
+        points = np.asarray(pcd.points, dtype=np.float32)
 
         if self.sample_camera_position:
             rot = look_at(camera)[:3, :3]

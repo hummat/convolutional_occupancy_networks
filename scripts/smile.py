@@ -179,9 +179,10 @@ def from_pointcloud(use_trimesh=True, visualize=True):
 
 
 def data_test():
-    seed_all_rng(42)
+    seed_all_rng(73)
     # path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1/*/*")))
-    path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/occupancy_networks/ShapeNet/extra/02876657/*")))
+    # path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/occupancy_networks/ShapeNet/extra/02876657/*")))
+    path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/depth/02876657/*")))
     # path = np.array([p.replace("occupancy_networks/ShapeNet/core", "ShapeNetCore.v1") for p in path])
     path = np.array([p for p in path if not p.endswith(".lst")])
     transform = [
@@ -194,16 +195,18 @@ def data_test():
                                                   sample_camera_position='',
                                                   rotate_object='yx',
                                                   transform=transform)  # 22.7s (mesh), 36.6s (pcd)
+    input_field = fields.BlenderProcDepthPointCloudField(transform=transform)
     pointcloud_field = fields.PointCloudField("pointcloud.npz")
     points_field = fields.PointsField("points.npz", unpackbits=True)
 
     data_transform = transforms.Compose([data.Rotate(to_world_frame=True),
-                                         data.RandomScale(),
-                                         data.NormalizeInputs(scale=False)])
-
+                                         # data.Scale(scale_range=(0.1, 1)),
+                                         data.Normalize(center=True, scale=True)])
+    data_transform = data.Rotate(to_world_frame=True)
 
     path = sorted(list(np.random.choice(path, size=10, replace=False)) * 10)
     inputs = Parallel(n_jobs=16)(delayed(input_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
+    path = [p.replace("depth", "occupancy_networks/ShapeNet/extra") for p in path]
     pointclouds = Parallel(n_jobs=16)(delayed(pointcloud_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
     points = Parallel(n_jobs=16)(delayed(points_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
     for i, (inp, pcd, point) in enumerate(zip(inputs, pointclouds, points)):
@@ -212,15 +215,20 @@ def data_test():
                        "inputs.x_angle": inp["x_angle"],
                        "pointcloud": pcd[None],
                        "points": point[None]}
-        input_data = data_transform(data_fields)
-        points, points_gt = input_data["inputs"], input_data["pointcloud"]
+
+        data_fields = data_transform(data_fields)
+        trafo = np.eye(4)
+        trafo[:3, :3] = inp["rot"].T
+        trafo[:3, 3] = inp["cam"]
+        #points, points_gt = input_data["inputs"], input_data["pointcloud"]
 
         forward = [0, 0, 1]
         up = [0, 1, 0]
         # forward, right, up = look_at(cams[i], return_frame=True)
-        o3d.visualization.draw_geometries([o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points)),
-                                           o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points_gt)).paint_uniform_color([0.8, 0.8, 0.8]),
-                                           o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)],
+        o3d.visualization.draw_geometries([o3d.geometry.PointCloud(o3d.utility.Vector3dVector(data_fields["inputs"])),
+                                           o3d.geometry.PointCloud(o3d.utility.Vector3dVector(data_fields["pointcloud"])).paint_uniform_color([0.8, 0.8, 0.8]),
+                                           o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5),
+                                           o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1).transform(trafo)],
                                           window_name=path[i].split('/')[-1],
                                           zoom=1,
                                           lookat=[0, 0, 0],
@@ -246,22 +254,5 @@ def loader_test():
             pass
 
 
-def depth_test():
-    data = np.load("/home/matthias/Data2/datasets/shapenet/depth/1a7ba1f4c892e2da30711cdbdbc73924/shard0.npz")
-    depth = data["depth"][10]
-    print(depth.min(), depth.max(), depth.shape)
-    mask = np.zeros_like(depth).astype(bool)
-    mask[depth < depth.max()] = True
-    extrinsic = data["cameras"][10]
-    print(extrinsic)
-    depth = eval_data(depth * mask,
-                      camera_intrinsic=[640, 0, 320,
-                                        0, 640, 240],
-                      camera_extrinsic=extrinsic,
-                      depth_trunc=3.0)
-    depth = process_point_cloud(depth, estimate_normals=True)
-    draw_geometries([depth, o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)])
-
-
 if __name__ == "__main__":
-    depth_test()
+    data_test()

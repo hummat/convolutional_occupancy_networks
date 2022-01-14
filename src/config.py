@@ -152,14 +152,14 @@ def get_dataset(mode, cfg, return_idx=False):
             scale = cfg['data']['scale']
             if not isinstance(scale, (tuple, list)):
                 scale = (0.05, 0.5)
-            transform.append(data.RandomScale(scale))
+            transform.append(data.Scale(scale))
         if cfg['data']['normalize']:
             norm = cfg['data']['normalize']
             if isinstance(norm, str):
                 norm = norm.lower()
             else:
                 norm = 'center_scale'
-            transform.append(data.NormalizeInputs(center='center' in norm, scale='scale' in norm))
+            transform.append(data.Normalize(center='center' in norm, scale='scale' in norm))
 
         dataset = data.Shapes3dDataset(
             dataset_folder,

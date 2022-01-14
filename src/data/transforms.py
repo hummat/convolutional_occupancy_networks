@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R
@@ -111,40 +111,22 @@ class SubsamplePointcloud(object):
         points = data[None]
         normals = data['normals']
 
-        indices = np.random.randint(points.shape[0], size=self.N)
+        if points.shape[0] < self.N:
+            indices = np.random.choice(points.shape[0], size=self.N)
+        else:
+            indices = np.random.randint(points.shape[0], size=self.N)
+
         data_out[None] = points[indices, :]
         data_out['normals'] = normals[indices, :]
 
         return data_out
 
 
-class NormalizeInputs(object):
+class Normalize(object):
     def __init__(self, center: bool = True, scale: bool = True):
-        print(f"Normalizing inputs (centering: {center}, scaling: {scale})")
+        print(f"Normalizing data (centering: {center}, scaling: {scale})")
         self.center = center
         self.scale = scale
-
-    def __call__(self, data):
-        data_out = data.copy()
-        points = data["inputs"]
-
-        scale = (points.max(axis=0) - points.min(axis=0)).max()
-        loc = (points.max(axis=0) + points.min(axis=0)) / 2
-
-        if self.center:
-            points -= loc
-        if self.scale:
-            points *= 1 / scale
-
-        data_out["inputs"] = points.astype(np.float32)
-
-        return data_out
-
-
-class RandomScale(object):
-    def __init__(self, scale_range: Tuple[float, float] = (0.05, 0.5)):
-        print(f"Randomly scaling data (range={scale_range})")
-        self.scale_range = scale_range
 
     def __call__(self, data):
         data_out = data.copy()
@@ -153,12 +135,58 @@ class RandomScale(object):
         pointcloud = data.get("pointcloud")
         inputs = data.get("inputs")
 
-        scale = np.random.uniform(*self.scale_range)
+        scale = (inputs.max(axis=0) - inputs.min(axis=0)).max()
+        loc = (inputs.max(axis=0) + inputs.min(axis=0)) / 2
+
+        for k, v in zip(["points", "pointcloud", "inputs"],
+                        [points, pointcloud, inputs]):
+            if v is not None:
+                if self.center:
+                    data_out[k] = (v - loc).astype(np.float32)
+                if self.scale:
+                    data_out[k] = (v / scale).astype(np.float32)
+
+        return data_out
+
+
+class Scale(object):
+    def __init__(self,
+                 scale_range: Optional[Tuple[float, float]] = None,
+                 add_points: bool = False,
+                 box_size: float = 1.1):
+        if scale_range:
+            print(f"Randomly scaling data (range={scale_range})")
+        else:
+            print(f"Scaling data")
+        self.scale_range = scale_range
+        self.add_points = add_points
+        self.box_size = box_size
+
+    def __call__(self, data):
+        data_out = data.copy()
+
+        points = data.get("points")
+        pointcloud = data.get("pointcloud")
+        inputs = data.get("inputs")
+        scale = data.get("scale")
+
+        if scale is None and self.scale_range:
+            scale = np.random.uniform(*self.scale_range)
 
         for k, v in zip(["points", "pointcloud", "inputs"],
                         [points, pointcloud, inputs]):
             if v is not None:
                 data_out[k] = (v * scale).astype(np.float32)
+
+        if scale < 1 and self.add_points:
+            additional_points = np.random.rand(len(points), 3)
+            additional_points = self.box_size * (additional_points - 0.5)
+            additional_points = additional_points[(additional_points[:, 0] > scale / 2) | (additional_points[:, 0] < -scale / 2)]
+            additional_points = additional_points[(additional_points[:, 1] > scale / 2) | (additional_points[:, 1] < -scale / 2)]
+            additional_points = additional_points[(additional_points[:, 2] > scale / 2) | (additional_points[:, 2] < -scale / 2)]
+            data_out["points"] = np.concatenate([points, additional_points], axis=0).astype(np.float32)
+            data_out["points.occ"] = np.concatenate([data.get("points.occ"),
+                                                     np.zeros(len(additional_points))]).astype(np.float32)
             
         return data_out
 
@@ -188,8 +216,7 @@ class SubsamplePoints(object):
         data_out = data.copy()
         if isinstance(self.N, int):
             idx = np.random.randint(points.shape[0], size=self.N)
-            data_out.update({None: points[idx, :],
-                             'occ': occ[idx]})
+            data_out.update({None: points[idx, :], 'occ': occ[idx]})
         else:
             Nt_out, Nt_in = self.N
             occ_binary = (occ >= 0.5)
