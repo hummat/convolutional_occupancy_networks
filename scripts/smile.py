@@ -181,8 +181,8 @@ def from_pointcloud(use_trimesh=True, visualize=True):
 def data_test():
     seed_all_rng(73)
     # path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1/*/*")))
-    # path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/occupancy_networks/ShapeNet/extra/02876657/*")))
-    path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/depth/02876657/*")))
+    path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/occupancy_networks/ShapeNet/extra/02876657/*")))
+    # path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/depth/02876657/*")))
     # path = np.array([p.replace("occupancy_networks/ShapeNet/core", "ShapeNetCore.v1") for p in path])
     path = np.array([p for p in path if not p.endswith(".lst")])
     transform = [
@@ -195,18 +195,18 @@ def data_test():
                                                   sample_camera_position='',
                                                   rotate_object='yx',
                                                   transform=transform)  # 22.7s (mesh), 36.6s (pcd)
-    input_field = fields.BlenderProcDepthPointCloudField(transform=transform)
+    # input_field = fields.BlenderProcDepthPointCloudField(transform=transform)
     pointcloud_field = fields.PointCloudField("pointcloud.npz")
     points_field = fields.PointsField("points.npz", unpackbits=True)
 
     data_transform = transforms.Compose([data.Rotate(to_world_frame=True),
                                          # data.Scale(scale_range=(0.1, 1)),
                                          data.Normalize(center=True, scale=True)])
-    data_transform = data.Rotate(to_world_frame=True)
+    data_transform = data.Rotate(to_cam_frame=True)
 
     path = sorted(list(np.random.choice(path, size=10, replace=False)) * 10)
     inputs = Parallel(n_jobs=16)(delayed(input_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
-    path = [p.replace("depth", "occupancy_networks/ShapeNet/extra") for p in path]
+    # path = [p.replace("depth", "occupancy_networks/ShapeNet/extra") for p in path]
     pointclouds = Parallel(n_jobs=16)(delayed(pointcloud_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
     points = Parallel(n_jobs=16)(delayed(points_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
     for i, (inp, pcd, point) in enumerate(zip(inputs, pointclouds, points)):
@@ -216,7 +216,7 @@ def data_test():
                        "pointcloud": pcd[None],
                        "points": point[None]}
 
-        data_fields = data_transform(data_fields)
+        # data_fields = data_transform(data_fields)
         trafo = np.eye(4)
         trafo[:3, :3] = inp["rot"].T
         trafo[:3, 3] = inp["cam"]
