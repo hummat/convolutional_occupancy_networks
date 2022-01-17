@@ -123,10 +123,12 @@ class SubsamplePointcloud(object):
 
 
 class Normalize(object):
-    def __init__(self, center: bool = True, scale: bool = True):
+    def __init__(self, center: str = "xyz", scale: bool = True, to_min_val: str = "", to_max_val: str = ""):
         print(f"Normalizing data (centering: {center}, scaling: {scale})")
         self.center = center
         self.scale = scale
+        self.to_min_val = to_min_val
+        self.to_max_val = to_max_val
 
     def __call__(self, data):
         data_out = data.copy()
@@ -136,13 +138,36 @@ class Normalize(object):
         inputs = data.get("inputs")
 
         scale = (inputs.max(axis=0) - inputs.min(axis=0)).max()
-        loc = (inputs.max(axis=0) + inputs.min(axis=0)) / 2
+        _loc = (inputs.max(axis=0) + inputs.min(axis=0)) / 2
+        min_vals = inputs.min(axis=0)
+        max_vals = inputs.max(axis=0)
+
+        loc = np.zeros(3)
+        if 'x' in self.center:
+            loc[0] = _loc[0]
+        if 'y' in self.center:
+            loc[1] = _loc[1]
+        if 'z' in self.center:
+            loc[2] = _loc[2]
+
+        if 'x' in self.to_min_val:
+            loc[0] = min_vals[0]
+        if 'y' in self.to_min_val:
+            loc[1] = min_vals[1]
+        if 'z' in self.to_min_val:
+            loc[2] = min_vals[2]
+
+        if 'x' in self.to_max_val:
+            loc[0] = max_vals[0]
+        if 'y' in self.to_max_val:
+            loc[1] = max_vals[1]
+        if 'z' in self.to_max_val:
+            loc[2] = max_vals[2]
 
         for k, v in zip(["points", "pointcloud", "inputs"],
                         [points, pointcloud, inputs]):
             if v is not None:
-                if self.center:
-                    data_out[k] = (v - loc).astype(np.float32)
+                data_out[k] = (v - loc).astype(np.float32)
                 if self.scale:
                     data_out[k] = (v / scale).astype(np.float32)
 
