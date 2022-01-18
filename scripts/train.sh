@@ -29,12 +29,12 @@ start_time=$(date +%s)
 echo "Job Started at $(date)"
 
 CONFIG="$1"
-WEIGHTS="$2"
+WEIGHTS="${2:-''}"
 
 echo "config:" "$CONFIG"
-echo "weights:" "${WEIGHTS:=''}"
+echo "weights:" "$WEIGHTS"
 
-cd /net/rmc-lx0038/home_local/git/convolutional_occupancy_networks
+cd /net/rmc-lx0038/home_local/git/convolutional_occupancy_networks || return
 python train.py "$CONFIG" --weights "$WEIGHTS"
 
 echo "Job ended at $(date)"
