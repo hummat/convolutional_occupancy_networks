@@ -1,10 +1,12 @@
 import math
 import os
 from typing import Union, Tuple, List
+import json
 
 import numpy as np
 import trimesh
 import open3d as o3d
+from easy_o3d.utils import get_camera_parameters_from_blenderproc_bopwriter, convert_depth_image_to_point_cloud
 
 from src.common import coord2index, normalize_coord, look_at, get_rotation_from_point, sample_point_on_upper_hemisphere
 from src.data.core import Field
@@ -406,23 +408,46 @@ class PartialPointCloudField(Field):
 
 
 class BlenderProcDepthPointCloudField(Field):
-    def __init__(self, transform=None, unscale: bool = True):
+    def __init__(self, transform=None,
+                 unscale: bool = True,
+                 project: bool = False):
         self.transform = transform
         self.unscale = unscale
+        self.project = project
 
     def load(self, model_path, idx, category):
         shard = np.random.randint(10)
-        file = np.random.randint(100)
-        file_path = os.path.join(model_path,
-                                 "train_pbr",
-                                 str(shard).zfill(6),
-                                 "points",
-                                 str(file).zfill(6) + ".npz")
-        data = np.load(file_path)
+        if self.project:
+            chunk_path = os.path.join(model_path, "train_pbr", str(shard).zfill(6))
+            camera_parameters = get_camera_parameters_from_blenderproc_bopwriter(os.path.join(chunk_path, "scene_camera.json"))
+            with open(os.path.join(chunk_path, "scene_camera.json")) as f:
+                extrinsic_data = json.load(f)
 
-        points = data["points"]
-        cam = data["cam"]  # Blender world to camera transformation
-        scale = data["scale"]
+            for index in extrinsic_data.keys():
+                T_w2c = np.eye(4)
+                R_w2c = np.asarray(extrinsic_data[str(index)]["cam_R_w2c"]).reshape(3, 3)
+                t_w2c = np.asarray(extrinsic_data[str(index)]["cam_t_w2c"]) / 1000.0
+                T_w2c[:3, :3] = R_w2c
+                T_w2c[:3, 3] = t_w2c
+
+                depth =
+
+                inv_cam = np.linalg.inv(cam_intrinsics)
+                projection = (inv_cam @ coordinates).T
+                points = d.repeat(3).reshape(-1, 3) * projection
+                points = points[(d.ravel() > 0) & (d.ravel() <= 10)]
+        else:
+            file = np.random.randint(100)
+            file_path = os.path.join(model_path,
+                                     "train_pbr",
+                                     str(shard).zfill(6),
+                                     "points",
+                                     str(file).zfill(6) + ".npz")
+            data = np.load(file_path)
+
+            points = data["points"]
+            cam = data["cam"]  # Blender world to camera transformation
+            scale = data["scale"]
 
         swap_xy = np.array([[0, 1, 0],
                             [1, 0, 0],
@@ -586,7 +611,7 @@ class DepthLikePointCloudField(Field):
         if self.rotate_object:
             angles = np.random.uniform(360, size=len(self.rotate_object) if len(self.rotate_object) > 1 else None)
             if self.upper_hemisphere and 'x' in self.rotate_object:
-                x_angle = np.random.uniform(0, 90)
+                x_angle = np.random.uniform(0, 80)
                 angles[list(self.rotate_object).index('x')] = x_angle
             rot = Rotation.from_euler(self.rotate_object, angles, degrees=True).as_matrix()
             trafo = np.eye(4)
@@ -597,7 +622,8 @@ class DepthLikePointCloudField(Field):
         if 'x' in self.sample_camera_position:
             camera[0] = np.random.uniform(low=-1, high=1)
         if 'y' in self.sample_camera_position:
-            camera[1] = np.random.uniform(low=0 if self.upper_hemisphere else -1, high=1)
+            camera[1] = np.random.uniform(low=0 if self.upper_hemisphere else -1,
+                                          high=0.9 if self.upper_hemisphere else 1)
         if 'z' in self.sample_camera_position:
             camera[2] = np.random.uniform(low=-1, high=1)
 

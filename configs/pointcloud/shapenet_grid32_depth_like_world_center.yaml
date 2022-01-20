@@ -1,8 +1,6 @@
 inherit_from: configs/pointcloud/shapenet_grid32_depth_like_world.yaml
 data:
-  normalize: scale
-  voxels_file: null
+  normalize: center
 training:
   pre_trained_weights: /home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_depth_like_world/model_best.pt
-  out_dir: out/pointcloud/shapenet_grid32_depth_like_world_scale
-  in_world_coords: true
+  out_dir: out/pointcloud/shapenet_grid32_depth_like_world_center

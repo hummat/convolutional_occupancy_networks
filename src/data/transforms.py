@@ -40,6 +40,9 @@ class Rotate(object):
         pcd = data.get('pointcloud')
         pcd_normals = data.get('pointcloud.normals')
 
+        pcd_chamfer = data.get('pointcloud_chamfer')
+        pcd_chamfer_normals = data.get('pointcloud_chamfer.normals')
+
         if self.to_cam_frame:
             rot = data.get('inputs.rot')
         elif self.to_world_frame:
@@ -50,8 +53,22 @@ class Rotate(object):
         else:
             rot = R.random().as_matrix()
 
-        for k, v in zip(['points', 'points_iou', 'inputs', 'inputs.normals', 'pointcloud', 'pointcloud.normals'],
-                        [points, points_iou, inputs, normals, pcd, pcd_normals]):
+        for k, v in zip(['points',
+                         'points_iou',
+                         'pointcloud',
+                         'pointcloud.normals',
+                         'pointcloud_chamfer',
+                         'pointcloud_chamfer.normals',
+                         'inputs',
+                         'inputs.normals'],
+                        [points,
+                         points_iou,
+                         pcd,
+                         pcd_normals,
+                         pcd_chamfer,
+                         pcd_chamfer_normals,
+                         inputs,
+                         normals]):
             if v is not None:
                 data_out[k] = (rot @ v.T).T.astype(np.float32)
 
@@ -134,7 +151,9 @@ class Normalize(object):
         data_out = data.copy()
 
         points = data.get("points")
+        points_iou = data.get("points_iou")
         pointcloud = data.get("pointcloud")
+        pointcloud_chamfer = data.get("pointcloud_chamfer")
         inputs = data.get("inputs")
 
         scale = (inputs.max(axis=0) - inputs.min(axis=0)).max()
@@ -164,8 +183,8 @@ class Normalize(object):
         if 'z' in self.to_max_val:
             loc[2] = max_vals[2]
 
-        for k, v in zip(["points", "pointcloud", "inputs"],
-                        [points, pointcloud, inputs]):
+        for k, v in zip(["points", "points_iou", "pointcloud", "pointcloud_chamfer", "inputs"],
+                        [points, points_iou, pointcloud, pointcloud_chamfer, inputs]):
             if v is not None:
                 data_out[k] = (v - loc).astype(np.float32)
                 if self.scale:
@@ -191,6 +210,7 @@ class Scale(object):
         data_out = data.copy()
 
         points = data.get("points")
+        points_iou = data.get("points_iou")
         pointcloud = data.get("pointcloud")
         inputs = data.get("inputs")
         scale = data.get("scale")
@@ -198,8 +218,8 @@ class Scale(object):
         if scale is None and self.scale_range:
             scale = np.random.uniform(*self.scale_range)
 
-        for k, v in zip(["points", "pointcloud", "inputs"],
-                        [points, pointcloud, inputs]):
+        for k, v in zip(["points", "points_iou", "pointcloud", "inputs"],
+                        [points, points_iou, pointcloud, inputs]):
             if v is not None:
                 data_out[k] = (v * scale).astype(np.float32)
 

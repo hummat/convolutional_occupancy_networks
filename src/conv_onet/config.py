@@ -181,8 +181,11 @@ def get_data_fields(mode, cfg):
 
     if mode in ('val', 'test'):
         pointcloud_file = cfg['data']['pointcloud_file']
+        pointcloud_chamfer_file = cfg['data']['pointcloud_chamfer_file']
         points_iou_file = cfg['data']['points_iou_file']
         voxels_file = cfg['data']['voxels_file']
+
+        fields['idx'] = data.IndexField()
         if points_iou_file is not None:
             if input_type == 'pointcloud_crop':
                 fields['points_iou'] = data.PatchPointsField(points_iou_file,
@@ -196,6 +199,10 @@ def get_data_fields(mode, cfg):
         if voxels_file is not None:
             fields['voxels'] = data.VoxelsField(voxels_file)
         if pointcloud_file is not None:
-            fields['pointcloud'] = data.PointCloudField(pointcloud_file, multi_files=cfg['data']['multi_files'])
+            fields['pointcloud'] = data.PointCloudField(pointcloud_file,
+                                                        multi_files=cfg['data']['multi_files'])
+        if pointcloud_chamfer_file != pointcloud_file:
+            fields['pointcloud_chamfer'] = data.PointCloudField(pointcloud_chamfer_file,
+                                                                multi_files=cfg['data']['multi_files'])
 
     return fields

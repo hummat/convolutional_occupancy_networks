@@ -64,8 +64,10 @@ if generate_pointcloud and not hasattr(generator, 'generate_pointcloud'):
 # Loader
 test_loader = torch.utils.data.DataLoader(dataset,
                                           batch_size=1,
-                                          num_workers=8,
-                                          shuffle=False)
+                                          num_workers=cfg['test']['n_workers'],
+                                          shuffle=False,
+                                          collate_fn=data.collate_remove_none,
+                                          worker_init_fn=data.worker_init_reset_seed)
 
 # Statistics
 time_dicts = []

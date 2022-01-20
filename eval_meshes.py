@@ -47,9 +47,17 @@ def single_eval(data, args, generation_dir, dataset, cfg):
         pointcloud_dir = os.path.join(pointcloud_dir, category_id)
 
     # Evaluate
-    pointcloud_tgt = data['pointcloud_chamfer'].squeeze(0).numpy()
-    normals_tgt = data['pointcloud_chamfer.normals'].squeeze(0).numpy()
+    pointcloud_tgt = data.get('pointcloud_chamfer')
+    if pointcloud_tgt is None:
+        pointcloud_tgt = data.get('pointcloud')
+    pointcloud_tgt = pointcloud_tgt.squeeze(0).numpy()
+
+    normals_tgt = data.get('pointcloud_chamfer.normals')
+    if normals_tgt is None:
+        normals_tgt = data.get('pointcloud.normals')
+    normals_tgt = normals_tgt.squeeze(0).numpy()
     normals_tgt = normals_tgt if normals_tgt.sum() != 0 else None
+
     points_tgt = data['points_iou'].squeeze(0).numpy()
     occ_tgt = data['points_iou.occ'].squeeze(0).numpy()
 
@@ -123,30 +131,31 @@ def main():
         out_file_class = os.path.join(generation_dir, 'eval_input.csv')
 
     # Dataset
-    points_field = data.PointsField(
-        cfg['data']['points_iou_file'],
-        unpackbits=cfg['data']['points_unpackbits'],
-        multi_files=cfg['data']['multi_files']
-    )
-    pointcloud_field = data.PointCloudField(
-        cfg['data']['pointcloud_chamfer_file'],
-        multi_files=cfg['data']['multi_files']
-    )
-    fields = {
-        'points_iou': points_field,
-        'pointcloud_chamfer': pointcloud_field,
-        'idx': data.IndexField(),
-    }
-
-    print('Test split: ', cfg['data']['test_split'])
-
-    dataset_folder = cfg['data']['path']
-    dataset = data.Shapes3dDataset(
-        dataset_folder,
-        fields,
-        cfg['data']['test_split'],
-        categories=cfg['data']['classes'],
-        cfg=cfg)
+    dataset = config.get_dataset('test', cfg, return_idx=True)
+    # points_field = data.PointsField(
+    #     cfg['data']['points_iou_file'],
+    #     unpackbits=cfg['data']['points_unpackbits'],
+    #     multi_files=cfg['data']['multi_files']
+    # )
+    # pointcloud_field = data.PointCloudField(
+    #     cfg['data']['pointcloud_chamfer_file'],
+    #     multi_files=cfg['data']['multi_files']
+    # )
+    # fields = {
+    #     'points_iou': points_field,
+    #     'pointcloud_chamfer': pointcloud_field,
+    #     'idx': data.IndexField(),
+    # }
+    #
+    # print('Test split: ', cfg['data']['test_split'])
+    #
+    # dataset_folder = cfg['data']['path']
+    # dataset = data.Shapes3dDataset(
+    #     dataset_folder,
+    #     fields,
+    #     cfg['data']['test_split'],
+    #     categories=cfg['data']['classes'],
+    #     cfg=cfg)
 
     # Evaluator
     # evaluator = MeshEvaluator(n_points=100000)
@@ -155,9 +164,10 @@ def main():
     n_jobs = cfg['test']['n_workers']
     test_loader = torch.utils.data.DataLoader(dataset,
                                               batch_size=1,
-                                              num_workers=cfg['test']['n_workers'],
+                                              num_workers=n_jobs,
                                               shuffle=False,
-                                              pin_memory=True)
+                                              collate_fn=data.collate_remove_none,
+                                              worker_init_fn=data.worker_init_reset_seed)
 
     # Evaluate all classes
     eval_dicts = []

@@ -137,9 +137,9 @@ def get_dataset(mode, cfg, return_idx=False):
         if return_idx:
             fields['idx'] = data.IndexField()
 
+        visualize = cfg['data']['visualize']
         transform = list()
         if cfg['data']['input_type'] in ['depth', 'depth_like']:
-            visualize = cfg['data']['visualize']
             if cfg['training']['in_cam_coords']:
                 transform.append(data.Rotate(to_cam_frame=True,
                                              visualize=visualize))
@@ -147,7 +147,7 @@ def get_dataset(mode, cfg, return_idx=False):
                 transform.append(data.Rotate(to_world_frame=True,
                                              visualize=visualize))
         if cfg['data']['rotate']:
-            transform.append(data.Rotate())
+            transform.append(data.Rotate(visualize=visualize))
         if cfg['data']['scale']:
             scale = cfg['data']['scale']
             if not isinstance(scale, (tuple, list)):
@@ -159,7 +159,7 @@ def get_dataset(mode, cfg, return_idx=False):
                 norm = norm.lower()
             else:
                 norm = 'center_scale'
-            transform.append(data.Normalize(center='center' in norm, scale='scale' in norm))
+            transform.append(data.Normalize(center='xyz' if 'center' in norm else "", scale='scale' in norm))
 
         dataset = data.Shapes3dDataset(
             dataset_folder,
@@ -204,10 +204,12 @@ def get_inputs_field(cfg):
                                                      upper_hemisphere=cfg['data']['sample_upper_hemisphere'],
                                                      transform=transform)
     elif input_type == 'depth':
-        inputs_field = data.DepthPointCloudField(cfg['data']['mesh_file'],
-                                                 num_points=cfg['data']['pointcloud_n'],
-                                                 upper_hemisphere=cfg['data']['sample_upper_hemisphere'],
-                                                 transform=transform)
+        inputs_field = data.PyrenderDepthPointCloudField(cfg['data']['mesh_file'],
+                                                         num_points=cfg['data']['pointcloud_n'],
+                                                         upper_hemisphere=cfg['data']['sample_upper_hemisphere'],
+                                                         transform=transform)
+    elif input_type == 'blenderproc':
+        inputs_field = data.BlenderProcDepthPointCloudField(transform=transform)
     elif input_type == 'pointcloud_crop':
         inputs_field = data.PatchPointCloudField(cfg['data']['pointcloud_file'], transform, None, cfg['data']['multi_files'])
     elif input_type == 'voxels':

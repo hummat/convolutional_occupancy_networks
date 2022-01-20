@@ -11,7 +11,7 @@ data:
   points_subsample: 2048
   points_file: points.npz
   points_iou_file: points.npz
-  voxels_file: 'model.binvox'
+  voxels_file: null
 model:
   encoder: pointnet_local_pool
   encoder_kwargs:
