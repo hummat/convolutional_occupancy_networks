@@ -182,7 +182,7 @@ def data_test():
     seed_all_rng(63)
     # path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1/*/*")))
     path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/occupancy_networks/ShapeNet/extra/02876657/*")))
-    # path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/depth/02876657/*")))
+    path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/depth/02876657/*")))
     # path = np.array([p.replace("occupancy_networks/ShapeNet/core", "ShapeNetCore.v1") for p in path])
     path = np.array([p for p in path if not p.endswith(".lst")])
     transform = [
@@ -195,18 +195,18 @@ def data_test():
                                                   sample_camera_position='',
                                                   rotate_object='yx',
                                                   transform=transform)  # 22.7s (mesh), 36.6s (pcd)
-    # input_field = fields.BlenderProcDepthPointCloudField(transform=transform, unscale=True)
+    input_field = fields.BlenderProcDepthPointCloudField(transform=transform, unscale=True, project=True)
     pointcloud_field = fields.PointCloudField("pointcloud.npz")
     points_field = fields.PointsField("points.npz", unpackbits=True)
 
     data_transform = transforms.Compose([data.Rotate(to_cam_frame=True),
                                          # data.Scale(scale_range=(0.1, 1)),
                                          data.Normalize(scale=False)])
-    # data_transform = data.Rotate(to_world_frame=True)
+    data_transform = data.Rotate(to_world_frame=True)
 
     path = sorted(list(np.random.choice(path, size=10, replace=False)) * 10)
     inputs = Parallel(n_jobs=16)(delayed(input_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
-    # path = [p.replace("depth", "occupancy_networks/ShapeNet/extra") for p in path]
+    path = [p.replace("depth", "occupancy_networks/ShapeNet/extra") for p in path]
     pointclouds = Parallel(n_jobs=16)(delayed(pointcloud_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
     points = Parallel(n_jobs=16)(delayed(points_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
     for i, (inp, pcd, point) in enumerate(zip(inputs, pointclouds, points)):
@@ -237,9 +237,8 @@ def data_test():
 
 
 def loader_test():
-    cfg = config.load_config(os.path.abspath('configs/pointcloud/shapenet_grid32_depth_like_upper.yaml'), 'configs/default.yaml')
-    cfg['data']['path'] = 'data/ShapeNet/extra'
-    cfg['data']['classes'] = ['02876657']
+    cfg = config.load_config(os.path.abspath('configs/pointcloud/shapenet_grid32_depth_like_world_bottle.yaml'), 'configs/default.yaml')
+    # cfg['data']['input_type'] = 'blenderproc'
     val_dataset = config.get_dataset('val', cfg, return_idx=True)
 
     val_loader = torch.utils.data.DataLoader(val_dataset,
@@ -255,4 +254,4 @@ def loader_test():
 
 
 if __name__ == "__main__":
-    data_test()
+    loader_test()

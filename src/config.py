@@ -209,13 +209,11 @@ def get_inputs_field(cfg):
                                                          upper_hemisphere=cfg['data']['sample_upper_hemisphere'],
                                                          transform=transform)
     elif input_type == 'blenderproc':
-        inputs_field = data.BlenderProcDepthPointCloudField(transform=transform)
+        inputs_field = data.BlenderProcDepthPointCloudField(transform=transform, project=True)
     elif input_type == 'pointcloud_crop':
         inputs_field = data.PatchPointCloudField(cfg['data']['pointcloud_file'], transform, None, cfg['data']['multi_files'])
     elif input_type == 'voxels':
         inputs_field = data.VoxelsField(cfg['data']['voxels_file'])
-    elif input_type == 'idx':
-        inputs_field = data.IndexField()
     else:
         raise ValueError(
             'Invalid input type (%s)' % input_type)

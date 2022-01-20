@@ -416,38 +416,36 @@ class BlenderProcDepthPointCloudField(Field):
         self.project = project
 
     def load(self, model_path, idx, category):
+        model_path = model_path.replace("data/ShapeNet/extra", "/home/matthias/Data2/datasets/shapenet/depth")
         shard = np.random.randint(10)
+        file = np.random.randint(100)
+        chunk_path = os.path.join(model_path, "train_pbr", str(shard).zfill(6))
         if self.project:
-            chunk_path = os.path.join(model_path, "train_pbr", str(shard).zfill(6))
-            camera_parameters = get_camera_parameters_from_blenderproc_bopwriter(os.path.join(chunk_path, "scene_camera.json"))
-            with open(os.path.join(chunk_path, "scene_camera.json")) as f:
-                extrinsic_data = json.load(f)
-
-            for index in extrinsic_data.keys():
-                T_w2c = np.eye(4)
-                R_w2c = np.asarray(extrinsic_data[str(index)]["cam_R_w2c"]).reshape(3, 3)
-                t_w2c = np.asarray(extrinsic_data[str(index)]["cam_t_w2c"]) / 1000.0
-                T_w2c[:3, :3] = R_w2c
-                T_w2c[:3, 3] = t_w2c
-
-                depth =
-
-                inv_cam = np.linalg.inv(cam_intrinsics)
-                projection = (inv_cam @ coordinates).T
-                points = d.repeat(3).reshape(-1, 3) * projection
-                points = points[(d.ravel() > 0) & (d.ravel() <= 10)]
+            path_to_scene_camera_json = os.path.join(chunk_path, "scene_camera.json")
+            path_to_camera_json = os.path.join(model_path, "camera.json")
+            camera_parameters = get_camera_parameters_from_blenderproc_bopwriter(path_to_scene_camera_json,
+                                                                                 path_to_camera_json,
+                                                                                 scene_id=file)[0]
+            pcd = convert_depth_image_to_point_cloud(os.path.join(chunk_path, "depth", str(file).zfill(6) + ".png"),
+                                                     camera_intrinsic=camera_parameters.intrinsic,
+                                                     camera_extrinsic=camera_parameters.extrinsic,
+                                                     depth_trunc=10)
+            points = np.asarray(pcd.points)
+            scale = 1.0
+            cam = camera_parameters.extrinsic
         else:
-            file = np.random.randint(100)
-            file_path = os.path.join(model_path,
-                                     "train_pbr",
-                                     str(shard).zfill(6),
-                                     "points",
-                                     str(file).zfill(6) + ".npz")
+            file_path = os.path.join(chunk_path, "points", str(file).zfill(6) + ".npz")
             data = np.load(file_path)
 
             points = data["points"]
             cam = data["cam"]  # Blender world to camera transformation
             scale = data["scale"]
+
+            rot = cam[:3, :3]  # Blender world to camera rotation (rotates points from world to camera frame)
+            trans = cam[:3, 3]  # Camera location in camera coordinates
+
+            # Apply camera extrinsics (Transform points from camera to Blender world coordinate frame)
+            points = (rot.T @ points.T).T - rot.T @ trans
 
         swap_xy = np.array([[0, 1, 0],
                             [1, 0, 0],
@@ -458,12 +456,10 @@ class BlenderProcDepthPointCloudField(Field):
         rot = cam[:3, :3]  # Blender world to camera rotation (rotates points from world to camera frame)
         trans = cam[:3, 3]  # Camera location in camera coordinates
 
+        points = (swap_yz @ points.T).T  # Change Blender to ShapeNet coordinate frame
+
         camera = -rot.T @ trans  # Camera location in Blender world coordinates
         camera = swap_yz @ camera  # Camera location in ShapeNet coordinates
-
-        # Apply camera extrinsics (Transform points from camera to Blender world coordinate frame)
-        points = (rot.T @ points.T).T - rot.T @ trans
-        points = (swap_yz @ points.T).T  # Change Blender to ShapeNet coordinate frame
 
         rot = swap_xy @ rot @ swap_yz.T  # Shapenet to camera rotation (rotates points from ShapeNet to camera frame)
         x_angle = np.arctan2(rot.T[2, 1], rot.T[2, 2])
