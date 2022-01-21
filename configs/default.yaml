@@ -5,6 +5,7 @@ data:
   watertight_path: data/watertight
   mesh_path: /home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1
   mesh_file: 'model.off'
+  path_prefix: null
   sample_upper_hemisphere: false
   classes: null
   input_type: img

@@ -408,44 +408,37 @@ class PartialPointCloudField(Field):
 
 
 class BlenderProcDepthPointCloudField(Field):
-    def __init__(self, transform=None,
+    def __init__(self,
+                 transform=None,
                  unscale: bool = True,
-                 project: bool = False):
+                 path_prefix: str = ""):
         self.transform = transform
         self.unscale = unscale
-        self.project = project
+        self.path_prefix = path_prefix
 
     def load(self, model_path, idx, category):
-        model_path = model_path.replace("data/ShapeNet/extra", "/home/matthias/Data2/datasets/shapenet/depth")
+        if self.path_prefix:
+            synthset = model_path.split('/')[-2]
+            model = model_path.split('/')[-1]
+            model_path = os.path.join(self.path_prefix, synthset, model)
+        path_to_camera_json = os.path.join(model_path, "camera.json")
+
         shard = np.random.randint(10)
         file = np.random.randint(100)
+
         chunk_path = os.path.join(model_path, "train_pbr", str(shard).zfill(6))
-        if self.project:
-            path_to_scene_camera_json = os.path.join(chunk_path, "scene_camera.json")
-            path_to_camera_json = os.path.join(model_path, "camera.json")
-            camera_parameters = get_camera_parameters_from_blenderproc_bopwriter(path_to_scene_camera_json,
-                                                                                 path_to_camera_json,
-                                                                                 scene_id=file)[0]
-            pcd = convert_depth_image_to_point_cloud(os.path.join(chunk_path, "depth", str(file).zfill(6) + ".png"),
-                                                     camera_intrinsic=camera_parameters.intrinsic,
-                                                     camera_extrinsic=camera_parameters.extrinsic,
-                                                     depth_trunc=10)
-            points = np.asarray(pcd.points)
-            scale = 1.0
-            cam = camera_parameters.extrinsic
-        else:
-            file_path = os.path.join(chunk_path, "points", str(file).zfill(6) + ".npz")
-            data = np.load(file_path)
+        path_to_scene_camera_json = os.path.join(chunk_path, "scene_camera.json")
 
-            points = data["points"]
-            cam = data["cam"]  # Blender world to camera transformation
-            scale = data["scale"]
-
-            rot = cam[:3, :3]  # Blender world to camera rotation (rotates points from world to camera frame)
-            trans = cam[:3, 3]  # Camera location in camera coordinates
-
-            # Apply camera extrinsics (Transform points from camera to Blender world coordinate frame)
-            points = (rot.T @ points.T).T - rot.T @ trans
+        camera_parameters = get_camera_parameters_from_blenderproc_bopwriter(path_to_scene_camera_json,
+                                                                             path_to_camera_json,
+                                                                             scene_id=file)[0]
+        pcd = convert_depth_image_to_point_cloud(os.path.join(chunk_path, "depth", str(file).zfill(6) + ".png"),
+                                                 camera_intrinsic=camera_parameters.intrinsic,
+                                                 camera_extrinsic=camera_parameters.extrinsic,
+                                                 depth_trunc=10)
+        points = np.asarray(pcd.points)
+        scale = np.load(os.path.join(model_path, "train_pbr", "scales.npy"))[shard]
+        cam = camera_parameters.extrinsic
 
         swap_xy = np.array([[0, 1, 0],
                             [1, 0, 0],

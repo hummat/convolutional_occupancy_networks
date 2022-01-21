@@ -1,0 +1,6 @@
+inherit_from: configs/pointcloud/shapenet_grid32_depth_like_world_bottle.yaml
+data:
+  input_type: blenderproc
+  path_prefix: "/home/matthias/Data2/datasets/shapenet/depth"
+training:
+  out_dir: out/pointcloud/shapenet_grid32_blenderproc_world_bottle
