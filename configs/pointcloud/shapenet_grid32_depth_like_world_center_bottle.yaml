@@ -1,0 +1,16 @@
+inherit_from: configs/pointcloud/shapenet_grid32_depth_like_world_center.yaml
+data:
+  classes: [ "02876657" ]
+  path: data/ShapeNet/extra
+  normalize: center
+training:
+  pre_trained_weights: /home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_depth_like_world_center/model_best.pt
+  out_dir: out/pointcloud/shapenet_grid32_depth_like_world_center_bottle
+  visualize_every: 1000
+  validate_every: 1000
+  checkpoint_every: 1000
+  backup_every: 1000
+  max_iter: 20000
+  validate_first: true
+generation:
+  vis_n_outputs: 10
