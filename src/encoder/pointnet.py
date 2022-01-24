@@ -17,14 +17,14 @@ class LocalPoolPointnet(nn.Module):
         dim (int): input points dimension
         hidden_dim (int): hidden dimension of the network
         scatter_type (str): feature aggregation when doing local pooling
-        unet (bool): weather to use U-Net
+        unet (bool): whether to use U-Net
         unet_kwargs (str): U-Net parameters
-        unet3d (bool): weather to use 3D U-Net
+        unet3d (bool): whether to use 3D U-Net
         unet3d_kwargs (str): 3D U-Net parameters
         plane_resolution (int): defined resolution for plane feature
         grid_resolution (int): defined resolution for grid feature 
         plane_type (str): feature type, 'xz' - 1-plane, ['xz', 'xy', 'yz'] - 3-plane, ['grid'] - 3D grid volume
-        padding (float): conventional padding paramter of ONet for unit cube, so [-0.5, 0.5] -> [-0.55, 0.55]
+        padding (float): conventional padding parameter of ONet for unit cube, so [-0.5, 0.5] -> [-0.55, 0.55]
         n_blocks (int): number of blocks ResNetBlockFC layers
     """
 

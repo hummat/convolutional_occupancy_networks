@@ -249,8 +249,10 @@ def loader_test():
                                              worker_init_fn=data.worker_init_reset_seed)
 
     for batch in tqdm.tqdm(val_loader):
-        for instance in batch.get("pointcloud"):
-            assert not torch.any(torch.isnan(instance)) and not torch.any(torch.isinf(instance))
+        for key in batch:
+            instance = batch.get(key)
+            if isinstance(instance, torch.Tensor):
+                assert not torch.any(torch.isnan(instance)) and not torch.any(torch.isinf(instance))
 
 
 if __name__ == "__main__":

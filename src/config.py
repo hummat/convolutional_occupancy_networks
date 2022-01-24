@@ -139,7 +139,7 @@ def get_dataset(mode, cfg, return_idx=False):
 
         visualize = cfg['data']['visualize']
         transform = list()
-        if cfg['data']['input_type'] in ['depth', 'depth_like']:
+        if cfg['data']['input_type'] in ['depth', 'depth_like', 'blenderproc']:
             if cfg['training']['in_cam_coords']:
                 transform.append(data.Rotate(to_cam_frame=True,
                                              visualize=visualize))
