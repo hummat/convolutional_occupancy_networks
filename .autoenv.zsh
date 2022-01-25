@@ -1,1 +1,1 @@
-conda activate conv_onet
+pyenv activate conv_onet

@@ -5,7 +5,7 @@
       <excludeFolder url="file://$MODULE_DIR$/data" />
       <excludeFolder url="file://$MODULE_DIR$/out" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.6 (conv_onet)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.6 (conv_onet) (2)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PyDocumentationSettings">

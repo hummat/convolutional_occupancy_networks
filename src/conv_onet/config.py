@@ -9,7 +9,7 @@ from src.conv_onet import models, training
 from src.encoder import encoder_dict
 
 
-def get_model(cfg, device=None, dataset=None, **kwargs):
+def get_model(cfg, dataset=None, device=None):
     """ Return the Occupancy Network model.
 
     Args:
@@ -48,7 +48,7 @@ def get_model(cfg, device=None, dataset=None, **kwargs):
             if 'grid' in fea_type:
                 encoder_kwargs['grid_resolution'] = update_reso(reso, dataset.depth)
             if bool(set(fea_type) & set(['xz', 'xy', 'yz'])):
-                encoder_kwargs['plane_resolution'] = update_reso(reso, dataset.depth)
+                encoder_kwargs['plane_resolution'] = update_reso(reso, dataset.d**kwargsepth)
         # if dataset.split == 'val': #TODO run validation in room level during training
         else:
             if 'grid' in fea_type:
@@ -99,7 +99,7 @@ def get_trainer(model, optimizer, cfg, device):
     return trainer
 
 
-def get_generator(model, cfg, device, **kwargs):
+def get_generator(model, cfg, device):
     """ Returns the generator object.
 
     Args:

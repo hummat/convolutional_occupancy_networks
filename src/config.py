@@ -58,7 +58,7 @@ def update_recursive(dict1, dict2):
 
 
 # Models
-def get_model(cfg, device=None, dataset=None):
+def get_model(cfg, dataset=None, device=None):
     """ Returns the model instance.
 
     Args:

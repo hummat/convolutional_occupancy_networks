@@ -1,5 +1,6 @@
 /out
 /data
+/out/pointcloud/wandb
 build
 .vscode
 .pytest_cache

@@ -32,6 +32,7 @@ training:
   batch_size: 32
   model_selection_metric: iou
   model_selection_mode: maximize
+  max_iter: 100000
   print_every: 100
   visualize_every: 10000
   validate_every: 10000

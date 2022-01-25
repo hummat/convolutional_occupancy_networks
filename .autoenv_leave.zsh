@@ -1,1 +1,2 @@
-conda deactivate
+pyenv deactivate
+

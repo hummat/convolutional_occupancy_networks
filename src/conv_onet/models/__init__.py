@@ -33,20 +33,20 @@ class ConvolutionalOccupancyNetwork(nn.Module):
 
         self._device = device
 
-    def forward(self, p, inputs, sample=True, **kwargs):
+    def forward(self, points, inputs, sample=True, **kwargs):
         """ Performs a forward pass through the network.
 
         Args:
-            p (tensor): sampled points
+            points (tensor): sampled points
             inputs (tensor): conditioning input
             sample (bool): whether to sample for z
         """
-        if isinstance(p, dict):
-            batch_size = p['p'].size(0)
+        if isinstance(points, dict):
+            batch_size = points['p'].size(0)
         else:
-            batch_size = p.size(0)
+            batch_size = points.size(0)
         c = self.encode_inputs(inputs)
-        p_r = self.decode(p, c, **kwargs)
+        p_r = self.decode(points, c, **kwargs)
         return p_r
 
     def encode_inputs(self, inputs):
