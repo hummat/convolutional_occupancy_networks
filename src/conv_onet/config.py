@@ -48,7 +48,7 @@ def get_model(cfg, dataset=None, device=None):
             if 'grid' in fea_type:
                 encoder_kwargs['grid_resolution'] = update_reso(reso, dataset.depth)
             if bool(set(fea_type) & set(['xz', 'xy', 'yz'])):
-                encoder_kwargs['plane_resolution'] = update_reso(reso, dataset.d**kwargsepth)
+                encoder_kwargs['plane_resolution'] = update_reso(reso, dataset.depth)
         # if dataset.split == 'val': #TODO run validation in room level during training
         else:
             if 'grid' in fea_type:

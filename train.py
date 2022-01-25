@@ -18,6 +18,9 @@ from src.eval import MeshEvaluator
 from collections import defaultdict
 import shutil
 
+
+data.seed_all_rng(11)
+
 # Arguments
 parser = argparse.ArgumentParser(description='Train a 3D reconstruction model.')
 parser.add_argument('config', type=str, help='Path to config file.')

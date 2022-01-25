@@ -8,6 +8,7 @@ from tqdm import tqdm
 from src import config, data
 from src.checkpoints import CheckpointIO
 
+
 data.seed_all_rng(11)
 
 parser = argparse.ArgumentParser(description='Evaluate mesh algorithms.')

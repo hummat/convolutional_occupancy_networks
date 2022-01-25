@@ -5,11 +5,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, RichModelSummary, RichProgressBar
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 from src import config, data
-from src.checkpoints import CheckpointIO
 from src.common import compute_iou
 
 
@@ -32,7 +31,7 @@ class LitConvOnet(pl.LightningModule):
         logits = self({"points": batch.get("points"), "inputs": batch.get("inputs")}).logits
         occ = batch.get("points.occ")
         loss = F.binary_cross_entropy_with_logits(logits, occ, reduction="none").sum(-1).mean()
-        self.log("loss", loss)
+        self.log("loss", loss, batch_size=self.cfg["training"]["batch_size"])
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -40,12 +39,12 @@ class LitConvOnet(pl.LightningModule):
         out = self({"points": batch.get("points_iou"), "inputs": batch.get("inputs")})
         occ_iou = batch.get("points_iou.occ")
         loss = F.binary_cross_entropy_with_logits(out.logits, occ_iou, reduction="none").sum(-1).mean()
-        self.log("val_loss", loss, prog_bar=True)
+        self.log("val_loss", loss, prog_bar=True, batch_size=1)
 
         occ_iou_np = (occ_iou >= 0.5).cpu().numpy()
         occ_iou_hat_np = (out.probs >= self.threshold).cpu().numpy()
         iou = compute_iou(occ_iou_np, occ_iou_hat_np)
-        self.log("val_iou", iou, prog_bar=True)
+        self.log("val_iou", iou, prog_bar=True, batch_size=1)
 
         if self.visualize and self.n_evals % self.vis_every_n_evals == 0:
             out_dir = os.path.abspath(self.cfg["training"]["out_dir"])
@@ -70,12 +69,12 @@ class LitConvOnet(pl.LightningModule):
         out = self({"points": batch.get("points_iou"), "inputs": batch.get("inputs")})
         occ_iou = batch.get("points_iou.occ")
         loss = F.binary_cross_entropy_with_logits(out.logits, occ_iou, reduction="none").sum(-1).mean()
-        self.log("test_loss", loss, prog_bar=True)
+        self.log("test_loss", loss, prog_bar=True, batch_size=1)
 
         occ_iou_np = (occ_iou >= 0.5).cpu().numpy()
         occ_iou_hat_np = (out.probs >= self.threshold).cpu().numpy()
         iou = compute_iou(occ_iou_np, occ_iou_hat_np)
-        self.log("test_iou", iou, prog_bar=True)
+        self.log("test_iou", iou, prog_bar=True, batch_size=1)
         return loss
 
     def configure_optimizers(self):
@@ -122,15 +121,19 @@ class LitDataModule(pl.LightningDataModule):
 
 
 def main():
+    data.seed_all_rng(11)
+
     parser = argparse.ArgumentParser(description="Train a 3D reconstruction model.")
     parser.add_argument("config", type=str, help="Path to config file.")
     parser.add_argument("--weights", type=str, help="Path to pre-trained weights.")
+    parser.add_argument("--checkpoint", type=str, help="Path to PyTorch Lightning checkpoint.")
     parser.add_argument("--resume", action="store_true", help="Resume training instead of starting from scratch.")
     parser.add_argument("--early_stopping", action="store_true", help="Terminate if validation loss stops improving.")
     parser.add_argument("--auto_lr", action="store_true", help="Tune learning rate automatically.")
     parser.add_argument("--auto_batch_size", action="store_true", help="Tune batch size automatically.")
     parser.add_argument("--test", action="store_true", help="Runs evaluation on the test set after training.")
     parser.add_argument("--wandb", action="store_true", help="Use the weights & biases logger.")
+    parser.add_argument("--id", type=str, help="The weights & biases run id.")
     parser.add_argument("--offline", action="store_true", help="Log offline.")
     parser.add_argument("--profile", action="store_true", help="Profile code to find bottlenecks.")
     args = parser.parse_args()
@@ -147,15 +150,6 @@ def main():
 
     save_dir = '/'.join(out_dir.split('/')[:-1])
     name = out_dir.split('/')[-1]
-
-    if args.wandb:
-        logger = WandbLogger(name=name,
-                             save_dir=save_dir,
-                             offline=args.offline,
-                             project="Convolutional Occupancy Networks")
-    else:
-        logger = TensorBoardLogger(save_dir=save_dir, name=name)
-    logger.log_hyperparams(cfg)
 
     dataset = LitDataModule(cfg)
     dataset.setup()
@@ -174,30 +168,58 @@ def main():
     print(f"Logging every {print_every} steps")
 
     conv_onet = LitConvOnet(cfg, dataset.train, dataset.val, vis_every_n_evals=vis_every_n_evals)
-    if not args.resume and args.weights:
-        checkpoint_io = CheckpointIO(out_dir, model=conv_onet.model, optimizer=conv_onet.configure_optimizers())
-        checkpoint_io.load(os.path.abspath(args.weights))
+    if not args.resume:
+        if args.weights:
+            state_dict = torch.load(os.path.abspath(args.weights))["model"]
+            conv_onet.model.load_state_dict(state_dict)
+        if args.checkpoint:
+            conv_onet = LitConvOnet.load_from_checkpoint(os.path.abspath(args.checkpoint),
+                                                         cfg=cfg,
+                                                         train_dataset=dataset.train,
+                                                         val_dataset=dataset.val,
+                                                         vis_every_n_evals=vis_every_n_evals)
     callbacks = [ModelCheckpoint(filename="{epoch}-{step}-{val_loss:.2f}-{val_iou:.2f}",
                                  monitor=f"val_{model_selection_metric}",
-                                 mode="max" if "max" in model_selection_mode else "min")]
+                                 mode="max" if "max" in model_selection_mode else "min"),
+                 RichProgressBar(),
+                 RichModelSummary()]
     if args.early_stopping:
-        callbacks.append(EarlyStopping(monitor="val_loss", mode="min", patience=5))
+        patience = max_epochs // eval_every_n_epochs // 10
+        print(f"Will terminate after {patience} evaluations without improvement")
+        print("(1/10th of all planned evaluations)")
+        callbacks.append(EarlyStopping(monitor="val_loss", mode="min", patience=patience))
+
+    if args.wandb:
+        logger = WandbLogger(name=name,
+                             save_dir=save_dir,
+                             offline=args.offline,
+                             id=args.id,
+                             project="Convolutional Occupancy Networks")
+        logger.watch(conv_onet)
+    else:
+        logger = TensorBoardLogger(save_dir=save_dir, name=name)
+    logger.log_hyperparams(cfg)
 
     trainer = pl.Trainer(logger=logger,
                          default_root_dir=out_dir,
                          callbacks=callbacks,
                          gpus=1,
-                         log_gpu_memory=None if args.wandb else "min_max",
+                         enable_progress_bar=False,
                          max_epochs=max_epochs,
                          max_steps=max_steps,
                          check_val_every_n_epoch=eval_every_n_epochs,
                          log_every_n_steps=print_every,
-                         resume_from_checkpoint=os.path.abspath(args.weights) if args.resume else None,
                          profiler="simple" if args.profile else None,
                          auto_lr_find=args.auto_lr,
                          auto_scale_batch_size=args.auto_batch_size)
-    trainer.fit(conv_onet, dataset)
+    trainer.fit(conv_onet, dataset, ckpt_path=os.path.abspath(args.checkpoint) if args.resume else None)
     print(f"Best validation {model_selection_metric}: {trainer.checkpoint_callback.best_model_score:.2f}.")
+
+    state_dict = torch.load(trainer.checkpoint_callback.best_model_path)["state_dict"]
+    best_model = state_dict.copy()
+    for key, value in state_dict.items():
+        best_model[key.replace("model.", "")] = best_model.pop(key)
+    torch.save(best_model, os.path.join(out_dir, "best_model.pt"))
 
     if args.test:
         trainer.test(datamodule=dataset)

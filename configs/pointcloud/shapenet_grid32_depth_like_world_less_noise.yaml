@@ -1,0 +1,11 @@
+inherit_from: configs/pointcloud/shapenet_grid32_depth_like_world.yaml
+data:
+  pointcloud_noise: 0.001
+training:
+  out_dir: out/pointcloud/shapenet_grid32_depth_like_world_less_noise
+  print_every: 10
+  visualize_every: 10000
+  validate_every: 1000
+  n_workers: 8
+  n_workers_val: 4
+  max_iter: 100000
