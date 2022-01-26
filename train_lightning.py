@@ -1,9 +1,12 @@
+import os
 import argparse
-import os.path
+from collections import defaultdict
+from multiprocessing import cpu_count
 
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, RichModelSummary, RichProgressBar
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
@@ -13,7 +16,12 @@ from src.common import compute_iou
 
 
 class LitConvOnet(pl.LightningModule):
-    def __init__(self, cfg, train_dataset, val_dataset, visualize: bool = True, vis_every_n_evals: int = 1):
+    def __init__(self,
+                 cfg,
+                 train_dataset,
+                 val_dataset,
+                 visualize: bool = True,
+                 vis_every_n_evals: int = 1):
         super().__init__()
         self.cfg = cfg
         self.model = config.get_model(cfg, train_dataset)
@@ -22,7 +30,14 @@ class LitConvOnet(pl.LightningModule):
         self.n_evals = 0
         self.vis_every_n_evals = vis_every_n_evals
         self.visualize = visualize
+        self.model_counter = defaultdict(int)
         self.save_hyperparameters(cfg)
+
+        if visualize:
+            out_dir = os.path.abspath(cfg["training"]["out_dir"])
+            self.vis_path = os.path.join(out_dir, "vis")
+            os.makedirs(self.vis_path, exist_ok=True)
+            self.generator = config.get_generator(self.model, self.cfg, device=None)
 
     def forward(self, x):
         return self.model(**x)
@@ -35,46 +50,47 @@ class LitConvOnet(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        self.n_evals += 1
         out = self({"points": batch.get("points_iou"), "inputs": batch.get("inputs")})
         occ_iou = batch.get("points_iou.occ")
         loss = F.binary_cross_entropy_with_logits(out.logits, occ_iou, reduction="none").sum(-1).mean()
-        self.log("val_loss", loss, prog_bar=True, batch_size=1)
+        self.log("val_loss", loss, prog_bar=True, batch_size=self.cfg["training"]["batch_size_val"])
 
         occ_iou_np = (occ_iou >= 0.5).cpu().numpy()
         occ_iou_hat_np = (out.probs >= self.threshold).cpu().numpy()
-        iou = compute_iou(occ_iou_np, occ_iou_hat_np)
-        self.log("val_iou", iou, prog_bar=True, batch_size=1)
+        iou = compute_iou(occ_iou_np, occ_iou_hat_np).mean()
+        self.log("val_iou", iou, prog_bar=True, batch_size=self.cfg["training"]["batch_size_val"])
 
         if self.visualize and self.n_evals % self.vis_every_n_evals == 0:
-            out_dir = os.path.abspath(self.cfg["training"]["out_dir"])
-            vis_path = os.path.join(out_dir, "vis")
-            os.makedirs(vis_path, exist_ok=True)
             iteration = self.n_evals * self.cfg["training"]["validate_every"]
-            generator = config.get_generator(self.model, self.cfg, out.logits.device)
-
-            if batch_idx < self.cfg["generation"]["vis_n_outputs"]:
-                mesh = generator.generate_mesh(batch, return_stats=False)
-
-                idx = batch["idx"].item()
+            for idx, inputs in zip(batch.get("idx"), batch.get("inputs")):
                 model_dict = self.val_dataset.get_model_dict(idx)
                 category_id = model_dict.get("category")
-                category_name = self.val_dataset.metadata[category_id].get("name")
-                category_name = category_name.split(',')[0]
 
-                mesh.export(os.path.join(vis_path, f"{iteration}_{category_name}_{idx}.off"))
+                c_it = self.model_counter[category_id]
+                if c_it < self.cfg["generation"]["vis_n_outputs"]:
+                    category_name = self.val_dataset.metadata[category_id].get("name")
+                    category_name = category_name.split(',')[0]
+
+                    self.generator.device = inputs.device
+                    mesh = self.generator.generate_mesh({"inputs": torch.unsqueeze(inputs, dim=0)}, return_stats=False)
+                    mesh.export(os.path.join(self.vis_path, f"{iteration}_{category_name}_{idx}.off"))
+                self.model_counter[category_id] += 1
         return loss
+
+    def on_validation_end(self):
+        self.n_evals += 1
+        self.model_counter = defaultdict(int)
 
     def test_step(self, batch, batch_idx):
         out = self({"points": batch.get("points_iou"), "inputs": batch.get("inputs")})
         occ_iou = batch.get("points_iou.occ")
         loss = F.binary_cross_entropy_with_logits(out.logits, occ_iou, reduction="none").sum(-1).mean()
-        self.log("test_loss", loss, prog_bar=True, batch_size=1)
+        self.log("test_loss", loss, prog_bar=True, batch_size=self.cfg["training"]["batch_size_test"])
 
         occ_iou_np = (occ_iou >= 0.5).cpu().numpy()
         occ_iou_hat_np = (out.probs >= self.threshold).cpu().numpy()
-        iou = compute_iou(occ_iou_np, occ_iou_hat_np)
-        self.log("test_iou", iou, prog_bar=True, batch_size=1)
+        iou = compute_iou(occ_iou_np, occ_iou_hat_np).mean()
+        self.log("test_iou", iou, prog_bar=True, batch_size=self.cfg["training"]["batch_size_test"])
         return loss
 
     def configure_optimizers(self):
@@ -83,12 +99,19 @@ class LitConvOnet(pl.LightningModule):
 
 
 class LitDataModule(pl.LightningDataModule):
-    def __init__(self, cfg):
+    def __init__(self,
+                 cfg,
+                 num_workers: int = cpu_count(),
+                 prefetch_factor: int = 2,
+                 pin_memory: bool = False):
         super().__init__()
         self.cfg = cfg
         self.train = None
         self.val = None
         self.test = None
+        self.num_workers = num_workers
+        self.prefetch_factor = prefetch_factor
+        self.pin_memory = pin_memory
 
     def setup(self, stage=None):
         self.train = config.get_dataset("train", self.cfg)
@@ -98,25 +121,28 @@ class LitDataModule(pl.LightningDataModule):
     def train_dataloader(self):
         return torch.utils.data.DataLoader(self.train,
                                            batch_size=self.cfg["training"]["batch_size"],
-                                           num_workers=self.cfg["training"]["n_workers"],
+                                           num_workers=self.num_workers,
                                            shuffle=True,
-                                           collate_fn=data.collate_remove_none,
-                                           worker_init_fn=data.worker_init_reset_seed)
+                                           pin_memory=self.pin_memory,
+                                           worker_init_fn=data.worker_init_reset_seed,
+                                           prefetch_factor=self.prefetch_factor,
+                                           persistent_workers=True)
 
     def val_dataloader(self):
         return torch.utils.data.DataLoader(self.val,
-                                           batch_size=1,
-                                           num_workers=self.cfg["training"]["n_workers_val"],
-                                           shuffle=False,
-                                           collate_fn=data.collate_remove_none,
-                                           worker_init_fn=data.worker_init_reset_seed)
+                                           batch_size=self.cfg["training"]["batch_size_val"],
+                                           num_workers=self.num_workers,
+                                           prefetch_factor=self.prefetch_factor,
+                                           pin_memory=self.pin_memory,
+                                           worker_init_fn=data.worker_init_reset_seed,
+                                           persistent_workers=True)
 
     def test_dataloader(self):
         return torch.utils.data.DataLoader(self.test,
-                                           batch_size=1,
-                                           num_workers=self.cfg["test"]["n_workers"],
-                                           shuffle=False,
-                                           collate_fn=data.collate_remove_none,
+                                           batch_size=self.cfg["training"]["batch_size_test"],
+                                           num_workers=self.num_workers,
+                                           prefetch_factor=self.prefetch_factor,
+                                           pin_memory=self.pin_memory,
                                            worker_init_fn=data.worker_init_reset_seed)
 
 
@@ -136,6 +162,11 @@ def main():
     parser.add_argument("--id", type=str, help="The weights & biases run id.")
     parser.add_argument("--offline", action="store_true", help="Log offline.")
     parser.add_argument("--profile", action="store_true", help="Profile code to find bottlenecks.")
+    parser.add_argument("--no_progress", action="store_true", help="Don't show progress during execution")
+    parser.add_argument("--pin_memory", action="store_true", help="Enable GPU memory pinning in data loaders.")
+    parser.add_argument("--num_workers", type=int, default=cpu_count(),
+                        help="Number of workers to spawn for data loading.")
+    parser.add_argument("--prefetch_factor", type=int, default=2, help="Number of batches to prefetch per worker.")
     args = parser.parse_args()
 
     cfg = config.load_config(args.config, "configs/default.yaml")
@@ -151,7 +182,7 @@ def main():
     save_dir = '/'.join(out_dir.split('/')[:-1])
     name = out_dir.split('/')[-1]
 
-    dataset = LitDataModule(cfg)
+    dataset = LitDataModule(cfg, args.num_workers, args.prefetch_factor, args.pin_memory)
     dataset.setup()
 
     n_train_batches = int(np.ceil(len(dataset.train) / batch_size))
@@ -180,11 +211,13 @@ def main():
                                                          vis_every_n_evals=vis_every_n_evals)
     callbacks = [ModelCheckpoint(filename="{epoch}-{step}-{val_loss:.2f}-{val_iou:.2f}",
                                  monitor=f"val_{model_selection_metric}",
+                                 save_last=True,
                                  mode="max" if "max" in model_selection_mode else "min"),
-                 RichProgressBar(),
                  RichModelSummary()]
-    if args.early_stopping:
-        patience = max_epochs // eval_every_n_epochs // 10
+    if not args.no_progress:
+        callbacks.append(RichProgressBar())
+    patience = max_epochs // eval_every_n_epochs // 10
+    if args.early_stopping and patience >= 3:
         print(f"Will terminate after {patience} evaluations without improvement")
         print("(1/10th of all planned evaluations)")
         callbacks.append(EarlyStopping(monitor="val_loss", mode="min", patience=patience))
@@ -204,7 +237,7 @@ def main():
                          default_root_dir=out_dir,
                          callbacks=callbacks,
                          gpus=1,
-                         enable_progress_bar=False,
+                         enable_progress_bar=not args.no_progress,
                          max_epochs=max_epochs,
                          max_steps=max_steps,
                          check_val_every_n_epoch=eval_every_n_epochs,
@@ -212,14 +245,16 @@ def main():
                          profiler="simple" if args.profile else None,
                          auto_lr_find=args.auto_lr,
                          auto_scale_batch_size=args.auto_batch_size)
-    trainer.fit(conv_onet, dataset, ckpt_path=os.path.abspath(args.checkpoint) if args.resume else None)
+    trainer.fit(conv_onet,
+                dataset,
+                ckpt_path=os.path.abspath(args.checkpoint) if args.checkpoint and args.resume else None)
     print(f"Best validation {model_selection_metric}: {trainer.checkpoint_callback.best_model_score:.2f}.")
 
     state_dict = torch.load(trainer.checkpoint_callback.best_model_path)["state_dict"]
-    best_model = state_dict.copy()
+    model_best = state_dict.copy()
     for key, value in state_dict.items():
-        best_model[key.replace("model.", "")] = best_model.pop(key)
-    torch.save(best_model, os.path.join(out_dir, "best_model.pt"))
+        model_best[key.replace("model.", "")] = model_best.pop(key)
+    torch.save({"model": model_best}, os.path.join(out_dir, "model_best.pt"))
 
     if args.test:
         trainer.test(datamodule=dataset)

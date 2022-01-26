@@ -2,6 +2,7 @@
 /data
 /out/pointcloud/wandb
 build
+.idea
 .vscode
 .pytest_cache
 .cache

@@ -1,11 +1,14 @@
 import copy
 import glob
 import os
+import pathlib
 import time
 import sys
+from multiprocessing import cpu_count
 
 import numpy as np
 import torch
+import torchdatasets as td
 from torchvision import transforms
 import tqdm
 import trimesh
@@ -179,7 +182,7 @@ def from_pointcloud(use_trimesh=True, visualize=True):
 
 
 def data_test():
-    seed_all_rng(63)
+    seed_all_rng(11)
     # path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1/*/*")))
     path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/occupancy_networks/ShapeNet/extra/02876657/*")))
     # path = np.array(sorted(glob.glob("/home/matthias/Data2/datasets/shapenet/depth/02876657/*")))
@@ -194,8 +197,10 @@ def data_test():
                                                   upper_hemisphere=True,
                                                   sample_camera_position='',
                                                   rotate_object='yx',
-                                                  transform=transform)  # 22.7s (mesh), 36.6s (pcd)
-    input_field = fields.BlenderProcDepthPointCloudField(transform=transform, unscale=True)
+                                                  transform=transform)
+    #input_field = fields.BlenderProcDepthPointCloudField(transform=transform,
+    #                                                     unscale=True,
+    #                                                     path_prefix="/home/matthias/Data2/datasets/shapenet/depth")
     pointcloud_field = fields.PointCloudField("pointcloud.npz")
     points_field = fields.PointsField("points.npz", unpackbits=True)
 
@@ -206,7 +211,6 @@ def data_test():
 
     path = sorted(list(np.random.choice(path, size=10, replace=False)) * 10)
     inputs = Parallel(n_jobs=16)(delayed(input_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
-    # path = [p.replace("depth", "occupancy_networks/ShapeNet/extra") for p in path]
     pointclouds = Parallel(n_jobs=16)(delayed(pointcloud_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
     points = Parallel(n_jobs=16)(delayed(points_field.load)(p, i, 0) for i, p in enumerate(tqdm.tqdm(path)))
     for i, (inp, pcd, point) in enumerate(zip(inputs, pointclouds, points)):
@@ -214,9 +218,10 @@ def data_test():
                        "inputs.rot": inp["rot"],
                        "inputs.x_angle": inp["x_angle"],
                        "pointcloud": pcd[None],
-                       "points": point[None]}
+                       "points": point[None],
+                       "occ": point["occ"]}
 
-        data_fields = data_transform(data_fields)
+        # data_fields = data_transform(data_fields)
         trafo = np.eye(4)
         trafo[:3, :3] = inp["rot"].T
         trafo[:3, 3] = inp["cam"]
@@ -226,7 +231,7 @@ def data_test():
         up = [0, 1, 0]
         # forward, right, up = look_at(cams[i], return_frame=True)
         o3d.visualization.draw_geometries([o3d.geometry.PointCloud(o3d.utility.Vector3dVector(data_fields["inputs"])),
-                                           o3d.geometry.PointCloud(o3d.utility.Vector3dVector(data_fields["pointcloud"])).paint_uniform_color([0.8, 0.8, 0.8]),
+                                           o3d.geometry.PointCloud(o3d.utility.Vector3dVector(data_fields["points"][data_fields["occ"] >= 0.5])).paint_uniform_color([0.8, 0.8, 0.8]),
                                            o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5),
                                            o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1).transform(trafo)],
                                           window_name=path[i].split('/')[-1],
@@ -237,22 +242,19 @@ def data_test():
 
 
 def loader_test():
-    cfg = config.load_config(os.path.abspath('configs/pointcloud/shapenet_grid32_depth_like_world_center.yaml'), 'configs/default.yaml')
-    # cfg['data']['input_type'] = 'blenderproc'
-    dataset = config.get_dataset('val', cfg, return_idx=True)
+    cfg = config.load_config(os.path.abspath('configs/pointcloud/shapenet_grid32_depth_like.yaml'), 'configs/default.yaml')
+    dataset = config.get_dataset('train', cfg, return_idx=False)
 
-    val_loader = torch.utils.data.DataLoader(dataset,
-                                             batch_size=1,
-                                             num_workers=cfg['training']['n_workers'],
-                                             shuffle=False,
-                                             collate_fn=data.collate_remove_none,
-                                             worker_init_fn=data.worker_init_reset_seed)
+    print(f"Using {cpu_count()} CPUs.")
+    loader = torch.utils.data.DataLoader(dataset,
+                                         batch_size=cfg['training']['batch_size'],
+                                         num_workers=cpu_count() - 1,
+                                         shuffle=True,
+                                         pin_memory=False,
+                                         worker_init_fn=data.worker_init_reset_seed)
 
-    for batch in tqdm.tqdm(val_loader):
-        for key in batch:
-            instance = batch.get(key)
-            if isinstance(instance, torch.Tensor):
-                assert not torch.any(torch.isnan(instance)) and not torch.any(torch.isinf(instance))
+    for batch in tqdm.tqdm(loader):
+        pass
 
 
 if __name__ == "__main__":

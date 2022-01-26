@@ -585,6 +585,8 @@ class DepthLikePointCloudField(Field):
                 points = pointcloud_dict['points']
             else:
                 points = pointcloud_dict
+            indices = np.random.randint(len(points), size=50000)
+            points = points[indices]
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(points)
         else:
@@ -593,10 +595,10 @@ class DepthLikePointCloudField(Field):
             loc = (mesh.get_max_bound() + mesh.get_min_bound()) / 2
             mesh.translate(-loc)
             mesh.scale(1 / scale, center=(0, 0, 0))
-            pcd = mesh.sample_points_uniformly(100000)
+            pcd = mesh.sample_points_uniformly(50000)
 
         rot = np.eye(3)
-        x_angle = None
+        x_angle = 0
         if self.rotate_object:
             angles = np.random.uniform(360, size=len(self.rotate_object) if len(self.rotate_object) > 1 else None)
             if self.upper_hemisphere and 'x' in self.rotate_object:

@@ -158,7 +158,7 @@ class Shapes3dDataset(data.Dataset):
 
         for field_name, field in self.fields.items():
             try:
-                if self.cfg['data']['input_type'] in ['depth', 'depth_like'] and field_name == 'inputs' and self.cfg['data']['mesh_path']:
+                if self.cfg['data']['mesh_path'] and self.cfg['data']['input_type'] in ['depth', 'depth_like'] and field_name == 'inputs':
                     model_path = model_path.replace(self.dataset_folder, self.cfg['data']['mesh_path'])
                 field_data = field.load(model_path, idx, info)
             except Exception as e:
@@ -257,7 +257,6 @@ def collate_remove_none(batch):
     Args:
         batch: batch
     """
-
     batch = list(filter(lambda x: x is not None, batch))
     return data.dataloader.default_collate(batch)
 

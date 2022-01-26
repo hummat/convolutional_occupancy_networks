@@ -91,7 +91,7 @@ def as_mesh(scene_or_mesh: Union[trimesh.Trimesh, trimesh.Scene]) -> trimesh.Tri
     return mesh
 
 
-def compute_iou(occ1, occ2) -> float:
+def compute_iou(occ1, occ2) -> np.ndarray:
     """ Computes the Intersection over Union (IoU) value for two sets of
     occupancy values.
 
@@ -119,7 +119,7 @@ def compute_iou(occ1, occ2) -> float:
 
     iou = (area_intersect / area_union)
 
-    return iou.item()
+    return iou
 
 
 def chamfer_distance(points1, points2, use_kdtree=True, give_id=False):

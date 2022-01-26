@@ -32,16 +32,17 @@ training:
   pre_trained_weights: /home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_partial/model_best.pt
   out_dir: out/pointcloud/shapenet_grid32_depth_like
   batch_size: 32
+  batch_size_val: 32
   model_selection_metric: iou
   model_selection_mode: maximize
-  print_every: 100
-  visualize_every: 10000
-  validate_every: 10000
+  print_every: 10
+  visualize_every: 1000
+  validate_every: 1000
   checkpoint_every: 2000
   backup_every: 10000
   n_workers: 8
   n_workers_val: 4
-  max_iter: 60000
+  max_iter: 100000
 test:
   threshold: 0.5
   eval_mesh: true
