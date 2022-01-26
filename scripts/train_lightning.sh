@@ -11,7 +11,7 @@ export PYENV_VIRTUALENV_DISABLE_PROMPT=1
 pyenv activate conv_onet_exp
 export LD_LIBRARY_PATH="$USERSTORE/glibc/build/math:$LD_LIBRARY_PATH"
 
-echo "=====Job Infos ===="
+echo "=====Job Info ===="
 echo "Node List: " "$SLURM_NODELIST"
 echo "Job ID: " "$SLURM_JOB_ID"
 echo "Job Name:" "$SLURM_JOB_NAME"
@@ -30,12 +30,14 @@ echo "Job Started at $(date)"
 
 CONFIG="$1"
 CHECKPOINT="${2:-''}"
+ID="${3:-''}"
 
-echo "config:" "$CONFIG"
-echo "checkpoint:" "$CHECKPOINT"
+echo "config: $CONFIG"
+echo "checkpoint: $CHECKPOINT"
+echo "id: $ID"
 
 cd /net/rmc-lx0038/home_local/git/convolutional_occupancy_networks || return
-python train_lightning.py "$CONFIG" --checkpoint "$CHECKPOINT" --early_stopping --wandb --resume
+python train_lightning.py "$CONFIG" --checkpoint "$CHECKPOINT" --id "$ID" --early_stopping --resume --wandb --no_progress --prefetch_factor 1
 
 echo "Job ended at $(date)"
 end_time=$(date +%s)
