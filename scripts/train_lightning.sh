@@ -8,7 +8,7 @@ eval "$(pyenv virtualenv-init -)"
 if command -v pyenv >/dev/null; then eval "$(pyenv init -)"; fi
 export PYENV_VIRTUALENV_DISABLE_PROMPT=1
 
-pyenv activate conv_onet 
+pyenv activate conv_onet_exp
 export LD_LIBRARY_PATH="$USERSTORE/glibc/build/math:$LD_LIBRARY_PATH"
 
 echo "=====Job Infos ===="
