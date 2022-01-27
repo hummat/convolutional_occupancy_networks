@@ -5,3 +5,7 @@ training:
   out_dir: out/agile/heterogeneous
   batch_size: 16
   batch_size_val: 16
+  print_every: 10
+  visualize_every: 2000
+  validate_every: 1000
+  max_iter: 200000
