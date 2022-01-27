@@ -3,6 +3,7 @@ data:
   part_ratio: 0.5
 training:
   out_dir: out/agile/cut_half
+  batch_size_val: 32
   print_every: 10
   visualize_every: 2000
   validate_every: 1000
