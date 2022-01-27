@@ -266,7 +266,7 @@ def collate_remove_none(batch):
 
 def heterogeneous_batching(batch):
     inputs = [torch.from_numpy(instance["inputs"]) for instance in batch]
-    if batch[0]["inputs.normals"]:
+    if batch[0].get("inputs.normals"):
         normals = [torch.from_numpy(instance["inputs.normals"]) for instance in batch]
     else:
         normals = None
