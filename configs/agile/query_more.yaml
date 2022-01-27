@@ -1,0 +1,5 @@
+inherit_from: configs/agile/shapenet_grid32_depth_like_world.yaml
+data:
+  points_subsample: 8192
+training:
+  out_dir: out/agile/query_more

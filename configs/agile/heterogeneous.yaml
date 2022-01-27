@@ -1,0 +1,7 @@
+inherit_from: configs/agile/shapenet_grid32_depth_like_world.yaml
+data:
+  pointcloud_n: null
+training:
+  out_dir: out/agile/heterogeneous
+  batch_size: 16
+  batch_size_val: 16

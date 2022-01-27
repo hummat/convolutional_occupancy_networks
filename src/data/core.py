@@ -7,6 +7,7 @@ import numpy as np
 import yaml
 import torch
 from torch.utils import data
+from pytorch3d.structures import Pointclouds
 
 from src.common import decide_total_volume_range, update_reso
 
@@ -257,7 +258,31 @@ def collate_remove_none(batch):
     Args:
         batch: batch
     """
-    batch = list(filter(lambda x: x is not None, batch))
+    # batch = list(filter(lambda x: x is not None, batch))
+    for i, instance in enumerate(batch):
+        batch[i] = {k: v for k, v in instance.items() if v is not None}
+    return data.dataloader.default_collate(batch)
+
+
+def heterogeneous_batching(batch):
+    inputs = [torch.from_numpy(instance["inputs"]) for instance in batch]
+    if batch[0]["inputs.normals"]:
+        normals = [torch.from_numpy(instance["inputs.normals"]) for instance in batch]
+    else:
+        normals = None
+    pcds = Pointclouds(inputs, normals)
+    inputs = pcds.points_padded()
+    if normals:
+        normals = pcds.normals_padded()
+    else:
+        normals = [None] * len(batch)
+
+    for x, (i, n) in enumerate(zip(inputs, normals)):
+        batch[x]["inputs"] = i
+        if n:
+            batch[x]["inputs.normals"] = n
+        else:
+            batch[x].pop("inputs.normals")
     return data.dataloader.default_collate(batch)
 
 
@@ -283,7 +308,7 @@ def seed_all_rng(seed=None):
 
 
 def worker_init_reset_seed(worker_id):
-    initial_seed = torch.initial_seed() % 2 ** 31
+    initial_seed = torch.initial_seed() % 2 ** 32
     seed_all_rng(initial_seed + worker_id)
 
 

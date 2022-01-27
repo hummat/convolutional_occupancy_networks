@@ -1,0 +1,7 @@
+inherit_from: configs/pointcloud/shapenet_grid32_depth_like_upper.yaml
+training:
+  out_dir: out/pointcloud/shapenet_grid32_depth_like_world
+  in_world_coords: true
+  print_every: 10
+  visualize_every: 2000
+  validate_every: 1000

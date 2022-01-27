@@ -2,11 +2,13 @@ import os
 import argparse
 from collections import defaultdict
 from multiprocessing import cpu_count
+import glob
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from torch.utils.data.dataloader import default_collate
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, RichModelSummary, RichProgressBar
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
@@ -30,7 +32,6 @@ class LitConvOnet(pl.LightningModule):
         self.n_evals = 0
         self.vis_every_n_evals = vis_every_n_evals
         self.visualize = visualize
-        self.model_counter = defaultdict(int)
         self.save_hyperparameters(cfg)
 
         if visualize:
@@ -38,9 +39,59 @@ class LitConvOnet(pl.LightningModule):
             self.vis_path = os.path.join(out_dir, "vis")
             os.makedirs(self.vis_path, exist_ok=True)
             self.generator = config.get_generator(self.model, self.cfg, device=None)
+            self.vis_data = dict()
+            self.model_counter = defaultdict(int)
+
+    def generate_mesh(self, inputs):
+        if not isinstance(inputs, torch.Tensor):
+            inputs = torch.from_numpy(inputs)
+        if inputs.shape[0] != 1:
+            inputs = torch.unsqueeze(inputs, dim=0)
+        return self.generator.generate_mesh({"inputs": inputs}, return_stats=False)
+
+    def visualize_data(self, batch, batch_idx):
+        if self.n_evals == 0:
+            for idx, inputs in zip(batch.get("idx"), batch.get("inputs")):
+                model_dict = self.val_dataset.get_model_dict(idx)
+                category_id = model_dict.get("category")
+
+                instance = self.model_counter[category_id]
+                if instance < self.cfg["generation"]["vis_n_outputs"]:
+                    category_name = self.val_dataset.metadata[category_id].get("name")
+                    category_name = category_name.split(',')[0]
+
+                    if batch_idx in self.vis_data:
+                        self.vis_data[batch_idx].append({"inputs": inputs,
+                                                         "category_name": category_name,
+                                                         "instance": instance})
+                    else:
+                        self.vis_data[batch_idx] = [{"inputs": inputs,
+                                                     "category_name": category_name,
+                                                     "instance": instance}]
+
+                    mesh = self.generate_mesh(inputs)
+                    mesh.export(os.path.join(self.vis_path, f"{self.global_step}_{category_name}_{instance}.off"))
+                self.model_counter[category_id] += 1
+        elif batch_idx in self.vis_data:
+            for batch_data in self.vis_data[batch_idx]:
+                inputs = batch_data["inputs"]
+                category_name = batch_data["category_name"]
+                instance = batch_data["instance"]
+
+                mesh = self.generate_mesh(inputs)
+                mesh.export(os.path.join(self.vis_path, f"{self.global_step}_{category_name}_{instance}.off"))
 
     def forward(self, x):
         return self.model(**x)
+
+    def on_train_start(self):
+        self.n_evals = 0
+        if self.visualize:
+            self.vis_data = dict()
+            self.model_counter = defaultdict(int)
+            meshes = glob.glob(os.path.join(self.vis_path, f"{self.global_step}*.off"))
+            for mesh in meshes:
+                os.remove(mesh)
 
     def training_step(self, batch, batch_idx):
         logits = self({"points": batch.get("points"), "inputs": batch.get("inputs")}).logits
@@ -48,6 +99,10 @@ class LitConvOnet(pl.LightningModule):
         loss = F.binary_cross_entropy_with_logits(logits, occ, reduction="none").sum(-1).mean()
         self.log("loss", loss, batch_size=self.cfg["training"]["batch_size"])
         return loss
+
+    def on_validation_start(self):
+        if self.visualize:
+            self.generator.device = self.device
 
     def validation_step(self, batch, batch_idx):
         out = self({"points": batch.get("points_iou"), "inputs": batch.get("inputs")})
@@ -61,25 +116,11 @@ class LitConvOnet(pl.LightningModule):
         self.log("val_iou", iou, prog_bar=True, batch_size=self.cfg["training"]["batch_size_val"])
 
         if self.visualize and self.n_evals % self.vis_every_n_evals == 0:
-            iteration = self.n_evals * self.cfg["training"]["validate_every"]
-            for idx, inputs in zip(batch.get("idx"), batch.get("inputs")):
-                model_dict = self.val_dataset.get_model_dict(idx)
-                category_id = model_dict.get("category")
-
-                c_it = self.model_counter[category_id]
-                if c_it < self.cfg["generation"]["vis_n_outputs"]:
-                    category_name = self.val_dataset.metadata[category_id].get("name")
-                    category_name = category_name.split(',')[0]
-
-                    self.generator.device = inputs.device
-                    mesh = self.generator.generate_mesh({"inputs": torch.unsqueeze(inputs, dim=0)}, return_stats=False)
-                    mesh.export(os.path.join(self.vis_path, f"{iteration}_{category_name}_{idx}.off"))
-                self.model_counter[category_id] += 1
+            self.visualize_data(batch, batch_idx)
         return loss
 
     def on_validation_end(self):
         self.n_evals += 1
-        self.model_counter = defaultdict(int)
 
     def test_step(self, batch, batch_idx):
         out = self({"points": batch.get("points_iou"), "inputs": batch.get("inputs")})
@@ -93,6 +134,9 @@ class LitConvOnet(pl.LightningModule):
         self.log("test_iou", iou, prog_bar=True, batch_size=self.cfg["training"]["batch_size_test"])
         return loss
 
+    def predict_step(self, batch, batch_idx, dataloader_idx=None):
+        pass
+
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
         return optimizer
@@ -103,7 +147,8 @@ class LitDataModule(pl.LightningDataModule):
                  cfg,
                  num_workers: int = cpu_count(),
                  prefetch_factor: int = 2,
-                 pin_memory: bool = False):
+                 pin_memory: bool = False,
+                 seed: int = 0):
         super().__init__()
         self.cfg = cfg
         self.train = None
@@ -112,6 +157,9 @@ class LitDataModule(pl.LightningDataModule):
         self.num_workers = num_workers
         self.prefetch_factor = prefetch_factor
         self.pin_memory = pin_memory
+        self.generator = torch.Generator()
+        self.generator.manual_seed(seed)
+        self.collate_fn = default_collate if self.cfg["data"]["pointcloud_n"] else data.heterogeneous_batching
 
     def setup(self, stage=None):
         self.train = config.get_dataset("train", self.cfg)
@@ -122,9 +170,11 @@ class LitDataModule(pl.LightningDataModule):
         return torch.utils.data.DataLoader(self.train,
                                            batch_size=self.cfg["training"]["batch_size"],
                                            num_workers=self.num_workers,
+                                           collate_fn=self.collate_fn,
                                            shuffle=True,
                                            pin_memory=self.pin_memory,
                                            worker_init_fn=data.worker_init_reset_seed,
+                                           generator=self.generator,
                                            prefetch_factor=self.prefetch_factor,
                                            persistent_workers=True)
 
@@ -132,9 +182,11 @@ class LitDataModule(pl.LightningDataModule):
         return torch.utils.data.DataLoader(self.val,
                                            batch_size=self.cfg["training"]["batch_size_val"],
                                            num_workers=self.num_workers,
+                                           collate_fn=self.collate_fn,
                                            prefetch_factor=self.prefetch_factor,
                                            pin_memory=self.pin_memory,
                                            worker_init_fn=data.worker_init_reset_seed,
+                                           generator=self.generator,
                                            persistent_workers=True)
 
     def test_dataloader(self):
@@ -143,12 +195,11 @@ class LitDataModule(pl.LightningDataModule):
                                            num_workers=self.num_workers,
                                            prefetch_factor=self.prefetch_factor,
                                            pin_memory=self.pin_memory,
-                                           worker_init_fn=data.worker_init_reset_seed)
+                                           worker_init_fn=data.worker_init_reset_seed,
+                                           generator=self.generator)
 
 
 def main():
-    data.seed_all_rng(11)
-
     parser = argparse.ArgumentParser(description="Train a 3D reconstruction model.")
     parser.add_argument("config", type=str, help="Path to config file.")
     parser.add_argument("--weights", type=str, help="Path to pre-trained weights.")
@@ -162,12 +213,17 @@ def main():
     parser.add_argument("--id", type=str, help="The weights & biases run id.")
     parser.add_argument("--offline", action="store_true", help="Log offline.")
     parser.add_argument("--profile", action="store_true", help="Profile code to find bottlenecks.")
-    parser.add_argument("--no_progress", action="store_true", help="Don't show progress during execution")
+    parser.add_argument("--no_progress", action="store_true", help="Disable progress bar.")
     parser.add_argument("--pin_memory", action="store_true", help="Enable GPU memory pinning in data loaders.")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output.")
+    parser.add_argument("--visualize", action="store_true", help="Generate some validation meshes.")
+    parser.add_argument("--seed", type=int, default=0, help="Set random seed.")
     parser.add_argument("--num_workers", type=int, default=cpu_count(),
                         help="Number of workers to spawn for data loading.")
     parser.add_argument("--prefetch_factor", type=int, default=2, help="Number of batches to prefetch per worker.")
     args = parser.parse_args()
+
+    data.seed_all_rng(args.seed)
 
     cfg = config.load_config(args.config, "configs/default.yaml")
     batch_size = cfg["training"]["batch_size"]
@@ -179,14 +235,16 @@ def main():
     visualize_every = cfg["training"]["visualize_every"]
     print_every = cfg["training"]["print_every"]
 
-    save_dir = '/'.join(out_dir.split('/')[:-1])
-    name = out_dir.split('/')[-1]
+    split_out_dir = out_dir.split('/')
+    save_dir = '/'.join(split_out_dir[:-1])
+    name = split_out_dir[-1]
+    project = split_out_dir[-2]
 
-    dataset = LitDataModule(cfg, args.num_workers, args.prefetch_factor, args.pin_memory)
+    dataset = LitDataModule(cfg, args.num_workers, args.prefetch_factor, args.pin_memory, args.seed)
     dataset.setup()
 
     n_train_batches = int(np.ceil(len(dataset.train) / batch_size))
-    eval_every_n_epochs = validate_every // n_train_batches
+    eval_every_n_epochs = np.round(validate_every / n_train_batches, 1)
     vis_every_n_evals = int(np.ceil(visualize_every / validate_every))
     max_steps = max_iter
     max_epochs = max_steps // n_train_batches
@@ -198,7 +256,7 @@ def main():
     print(f"Training for max. {max_epochs} epochs")
     print(f"Logging every {print_every} steps")
 
-    conv_onet = LitConvOnet(cfg, dataset.train, dataset.val, vis_every_n_evals=vis_every_n_evals)
+    conv_onet = LitConvOnet(cfg, dataset.train, dataset.val, args.visualize, vis_every_n_evals)
     if not args.resume:
         if args.weights:
             state_dict = torch.load(os.path.abspath(args.weights))["model"]
@@ -211,23 +269,27 @@ def main():
                                                          vis_every_n_evals=vis_every_n_evals)
     callbacks = [ModelCheckpoint(filename="{epoch}-{step}-{val_loss:.2f}-{val_iou:.2f}",
                                  monitor=f"val_{model_selection_metric}",
+                                 verbose=args.verbose,
                                  save_last=True,
                                  mode="max" if "max" in model_selection_mode else "min"),
                  RichModelSummary()]
     if not args.no_progress:
         callbacks.append(RichProgressBar())
-    patience = max_epochs // eval_every_n_epochs // 10
+    patience = max_epochs // int(np.ceil(eval_every_n_epochs)) // 10
     if args.early_stopping and patience >= 3:
         print(f"Will terminate after {patience} evaluations without improvement")
         print("(1/10th of all planned evaluations)")
-        callbacks.append(EarlyStopping(monitor="val_loss", mode="min", patience=patience))
+        callbacks.append(EarlyStopping(monitor="val_loss",
+                                       mode="min",
+                                       patience=patience,
+                                       verbose=args.verbose))
 
     if args.wandb:
         logger = WandbLogger(name=name,
                              save_dir=save_dir,
                              offline=args.offline,
                              id=args.id,
-                             project="Convolutional Occupancy Networks")
+                             project=project)
         logger.watch(conv_onet)
     else:
         logger = TensorBoardLogger(save_dir=save_dir, name=name)
@@ -238,9 +300,11 @@ def main():
                          callbacks=callbacks,
                          gpus=1,
                          enable_progress_bar=not args.no_progress,
+                         accumulate_grad_batches=32 // batch_size if batch_size < 32 else None,
                          max_epochs=max_epochs,
                          max_steps=max_steps,
-                         check_val_every_n_epoch=eval_every_n_epochs,
+                         check_val_every_n_epoch=int(np.ceil(eval_every_n_epochs)),
+                         val_check_interval=validate_every if eval_every_n_epochs < 1.0 else 1.0,
                          log_every_n_steps=print_every,
                          profiler="simple" if args.profile else None,
                          auto_lr_find=args.auto_lr,
@@ -248,7 +312,7 @@ def main():
     trainer.fit(conv_onet,
                 dataset,
                 ckpt_path=os.path.abspath(args.checkpoint) if args.checkpoint and args.resume else None)
-    print(f"Best validation {model_selection_metric}: {trainer.checkpoint_callback.best_model_score:.2f}.")
+    print(f"Best validation {model_selection_metric}: {trainer.checkpoint_callback.best_model_score:.2f}")
 
     state_dict = torch.load(trainer.checkpoint_callback.best_model_path)["state_dict"]
     model_best = state_dict.copy()

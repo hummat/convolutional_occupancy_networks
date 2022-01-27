@@ -115,7 +115,10 @@ class SubsamplePointcloud(object):
     """
 
     def __init__(self, N):
-        print(f"Subsampling pointcloud (N={N})")
+        if N:
+            print(f"Subsampling pointcloud (N={N})")
+        else:
+            print(f"No pointcloud subsampling.")
         self.N = N
 
     def __call__(self, data):
@@ -124,17 +127,20 @@ class SubsamplePointcloud(object):
         Args:
             data (dict): data dictionary
         """
+        if not self.N:
+            return data
         data_out = data.copy()
         points = data[None]
-        normals = data['normals']
+        normals = data.get("normals")
 
         if points.shape[0] < self.N:
             indices = np.random.choice(points.shape[0], size=self.N)
         else:
             indices = np.random.randint(points.shape[0], size=self.N)
 
-        data_out[None] = points[indices, :]
-        data_out['normals'] = normals[indices, :]
+        data_out[None] = points[indices]
+        if normals is not None:
+            data_out['normals'] = normals[indices]
 
         return data_out
 

@@ -199,7 +199,6 @@ def get_inputs_field(cfg):
                                                    part_ratio=cfg['data']['part_ratio'])
     elif input_type == 'depth_like':
         inputs_field = data.DepthLikePointCloudField(cfg['data']['mesh_file'] if cfg['data']['mesh_file'] else cfg['data']['pointcloud_file'],
-                                                     num_points=cfg['data']['pointcloud_n'],
                                                      rotate_object='yx',
                                                      upper_hemisphere=cfg['data']['sample_upper_hemisphere'],
                                                      transform=transform)

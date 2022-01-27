@@ -1,5 +1,5 @@
 from src.data.core import (
-    Shapes3dDataset, collate_remove_none, worker_init_fn, worker_init_reset_seed, seed_all_rng
+    Shapes3dDataset, collate_remove_none, worker_init_fn, worker_init_reset_seed, seed_all_rng, heterogeneous_batching
 )
 from src.data.fields import (
     IndexField, PointsField,
@@ -17,6 +17,7 @@ __all__ = [
     collate_remove_none,
     worker_init_fn,
     worker_init_reset_seed,
+    heterogeneous_batching,
     # Fields
     IndexField,
     PointsField,

@@ -1,17 +1,15 @@
-import math
 import os
-from typing import Union, Tuple, List
-import json
+from typing import Union
 
 import numpy as np
-import trimesh
 import open3d as o3d
+import trimesh
 from easy_o3d.utils import get_camera_parameters_from_blenderproc_bopwriter, convert_depth_image_to_point_cloud
+from scipy.spatial.transform import Rotation
 
 from src.common import coord2index, normalize_coord, look_at, get_rotation_from_point, sample_point_on_upper_hemisphere
 from src.data.core import Field
 from src.utils import binvox_rw
-from scipy.spatial.transform import Rotation
 
 
 class IndexField(Field):
@@ -139,7 +137,7 @@ class PointsField(Field):
 
         points_data = np.load(file_path)
         if isinstance(points_data, np.lib.npyio.NpzFile):
-            points = points_data['points']
+            points = points_data["points"]
         else:
             points = points_data[:, :3]
         # Break symmetry if given in float16:
@@ -148,7 +146,7 @@ class PointsField(Field):
             points += 1e-4 * np.random.randn(*points.shape)
 
         if isinstance(points_data, np.lib.npyio.NpzFile):
-            occupancies = points_data['occupancies']
+            occupancies = points_data["occupancies"]
             if self.unpackbits:
                 occupancies = np.unpackbits(occupancies)[:points.shape[0]]
             occupancies = occupancies.astype(np.float32)
@@ -160,10 +158,8 @@ class PointsField(Field):
                 occupancies = occupancies.astype(np.float32)
                 occupancies += 1e-4 * np.random.randn(*occupancies.shape)
 
-        data = {
-            None: points,
-            'occ': occupancies,
-        }
+        data = {None: points,
+                "occ": occupancies}
 
         if self.transform is not None:
             data = self.transform(data)
@@ -318,16 +314,15 @@ class PointCloudField(Field):
         pointcloud_dict = np.load(file_path)
 
         if isinstance(pointcloud_dict, np.lib.npyio.NpzFile):
-            points = pointcloud_dict['points'].astype(np.float32)
-            normals = pointcloud_dict['normals'].astype(np.float32)
+            points = pointcloud_dict["points"].astype(np.float32)
+            normals = pointcloud_dict["normals"].astype(np.float32)
         else:
             points = pointcloud_dict.astype(np.float32)
-            normals = np.zeros_like(points).astype(np.float32)
+            normals = None
 
-        data = {
-            None: points,
-            'normals': normals,
-        }
+        data = {None: points}
+        if normals is not None:
+            data["normals"] = normals
 
         if self.transform is not None:
             data = self.transform(data)
@@ -380,22 +375,22 @@ class PartialPointCloudField(Field):
             normals = pointcloud_dict['normals'].astype(np.float32)
         else:
             points = pointcloud_dict.astype(np.float32)
-            normals = np.zeros_like(points).astype(np.float32)
+            normals = None
 
         if self.plane:
             axes = np.random.choice([0, 1, 2], size=np.random.randint(1, 3))
             if len(axes) == 1:
                 pass
+            indices = np.arange(len(points))  # Todo: Fix
         else:
             side = np.random.randint(3)
             xb = [points[:, side].min(), points[:, side].max()]
             length = np.random.uniform(self.part_ratio * (xb[1] - xb[0]), (xb[1] - xb[0]))
-            ind = (points[:, side] - xb[0]) <= length
+            indices = (points[:, side] - xb[0]) <= length
 
-        data = {
-            None: points[ind],
-            'normals': normals[ind],
-        }
+        data = {None: points[indices]}
+        if normals is not None:
+            data["normals"] = normals[indices]
 
         if self.transform is not None:
             data = self.transform(data)
@@ -461,13 +456,10 @@ class BlenderProcDepthPointCloudField(Field):
         if self.unscale:
             points /= scale
 
-        data = {
-            None: points.astype(np.float32),
-            'normals': np.zeros_like(points, dtype=np.float32),
-            'rot': rot,
-            'cam': camera,
-            'x_angle': x_angle
-        }
+        data = {None: points.astype(np.float32),
+                "rot": rot,
+                "cam": camera,
+                "x_angle": x_angle}
 
         if self.transform is not None:
             data = self.transform(data)
@@ -497,7 +489,6 @@ class PyrenderDepthPointCloudField(Field):
         inv_camk = np.linalg.inv([[res_x, 0, res_x / 2], [0, res_y, res_y / 2], [0, 0, 1]])
         self.projection = (inv_camk @ coordinates).T
 
-        import pyrender
         import logging
         logger = logging.getLogger("trimesh")
         logger.setLevel(logging.ERROR)
@@ -545,10 +536,7 @@ class PyrenderDepthPointCloudField(Field):
             points[:, 2] -= 1
             points = points @ R
 
-        data = {
-            None: points.astype(np.float32),
-            'normals': np.zeros_like(points, dtype=np.float32)
-        }
+        data = {None: points.astype(np.float32)}
 
         if self.transform is not None:
             data = self.transform(data)
@@ -563,14 +551,12 @@ class PyrenderDepthPointCloudField(Field):
 class DepthLikePointCloudField(Field):
     def __init__(self,
                  file_name: str,
-                 num_points: int = 3000,
                  upper_hemisphere: bool = False,
                  rotate_object: str = '',
                  sample_camera_position: str = '',
                  transform: Union[None, object] = None):
         assert not (rotate_object and sample_camera_position)
         self.file_name = file_name
-        self.num_points = num_points
         self.upper_hemisphere = upper_hemisphere
         self.rotate_object = rotate_object
         self.sample_camera_position = sample_camera_position
@@ -619,13 +605,8 @@ class DepthLikePointCloudField(Field):
             camera[2] = np.random.uniform(low=-1, high=1)
 
         camera /= np.linalg.norm(camera)
-        # diameter = np.linalg.norm(np.asarray(pcd.get_max_bound()) - np.asarray(pcd.get_min_bound()))
         _, indices = pcd.hidden_point_removal(camera, 100)
 
-        # Not enough points
-        # if len(indices) < self.num_points:
-        #     points = np.asarray(pcd.points, dtype=np.float32)
-        # else:
         pcd = pcd.select_by_index(indices)
         points = np.asarray(pcd.points, dtype=np.float32)
 
@@ -637,13 +618,10 @@ class DepthLikePointCloudField(Field):
         elif self.rotate_object:
             points = (rot.T @ points.T).T
 
-        data = {
-            None: points.astype(np.float32),
-            'normals': np.zeros_like(points, dtype=np.float32),
-            'rot': rot,
-            'cam': camera,
-            'x_angle': x_angle
-        }
+        data = {None: points.astype(np.float32),
+                "rot": rot,
+                "cam": camera,
+                "x_angle": x_angle}
 
         if self.transform is not None:
             data = self.transform(data)

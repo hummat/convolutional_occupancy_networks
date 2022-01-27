@@ -128,7 +128,7 @@ class Trainer(BaseTrainer):
                 raise NotImplementedError
             eval_dict['loss'] = loss.cpu().numpy().item()
 
-        iou = compute_iou(occ_iou_np, occ_iou_hat_np)
+        iou = compute_iou(occ_iou_np, occ_iou_hat_np).mean()
         eval_dict['iou'] = iou
 
         # Estimate voxel iou
@@ -150,7 +150,7 @@ class Trainer(BaseTrainer):
                 occ_hat_np = (p_out.probs >= threshold).cpu().numpy()
             iou_voxels = compute_iou(voxels_occ_np, occ_hat_np)
 
-            eval_dict['iou_voxels'] = iou_voxels
+            eval_dict['iou_voxels'] = iou_voxels.mean()
 
         return eval_dict
 

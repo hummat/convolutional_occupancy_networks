@@ -1,8 +1,10 @@
 import argparse
 import os
+from multiprocessing import cpu_count
 
 import pandas as pd
 import torch
+from torch.utils.data import DataLoader
 import trimesh
 from joblib import Parallel, delayed
 from tabulate import tabulate
@@ -13,7 +15,7 @@ from src.eval import MeshEvaluator
 from src.utils.io import load_pointcloud
 
 
-def single_eval(data, args, generation_dir, dataset, cfg):
+def single_eval(batch, args, generation_dir, dataset, cfg):
     evaluator = MeshEvaluator()
     # Output folders
     if not args.eval_input:
@@ -24,7 +26,7 @@ def single_eval(data, args, generation_dir, dataset, cfg):
         pointcloud_dir = os.path.join(generation_dir, 'input')
 
     # Get index etc.
-    idx = data['idx'].item()
+    idx = batch['idx'].item()
 
     try:
         model_dict = dataset.get_model_dict(idx)
@@ -47,19 +49,19 @@ def single_eval(data, args, generation_dir, dataset, cfg):
         pointcloud_dir = os.path.join(pointcloud_dir, category_id)
 
     # Evaluate
-    pointcloud_tgt = data.get('pointcloud_chamfer')
+    pointcloud_tgt = batch.get('pointcloud_chamfer')
     if pointcloud_tgt is None:
-        pointcloud_tgt = data.get('pointcloud')
+        pointcloud_tgt = batch.get('pointcloud')
     pointcloud_tgt = pointcloud_tgt.squeeze(0).numpy()
 
-    normals_tgt = data.get('pointcloud_chamfer.normals')
+    normals_tgt = batch.get('pointcloud_chamfer.normals')
     if normals_tgt is None:
-        normals_tgt = data.get('pointcloud.normals')
+        normals_tgt = batch.get('pointcloud.normals')
     normals_tgt = normals_tgt.squeeze(0).numpy()
     normals_tgt = normals_tgt if normals_tgt.sum() != 0 else None
 
-    points_tgt = data['points_iou'].squeeze(0).numpy()
-    occ_tgt = data['points_iou.occ'].squeeze(0).numpy()
+    points_tgt = batch['points_iou'].squeeze(0).numpy()
+    occ_tgt = batch['points_iou.occ'].squeeze(0).numpy()
 
     # Evaluating mesh and pointcloud
     # Start row and put basic information inside
@@ -108,12 +110,12 @@ def single_eval(data, args, generation_dir, dataset, cfg):
 
 
 def main():
-    data.seed_all_rng(11)
-
     parser = argparse.ArgumentParser(description='Evaluate mesh algorithms.')
     parser.add_argument('config', type=str, help='Path to config file.')
     parser.add_argument('--no-cuda', action='store_true', help='Do not use cuda.')
     parser.add_argument('--eval_input', action='store_true', help='Evaluate inputs instead.')
+
+    data.seed_all_rng(0)
 
     args = parser.parse_args()
     cfg = config.load_config(args.config, 'configs/default.yaml')
@@ -130,44 +132,15 @@ def main():
         out_file = os.path.join(generation_dir, 'eval_input_full.pkl')
         out_file_class = os.path.join(generation_dir, 'eval_input.csv')
 
-    # Dataset
     dataset = config.get_dataset('test', cfg, return_idx=True)
-    # points_field = data.PointsField(
-    #     cfg['data']['points_iou_file'],
-    #     unpackbits=cfg['data']['points_unpackbits'],
-    #     multi_files=cfg['data']['multi_files']
-    # )
-    # pointcloud_field = data.PointCloudField(
-    #     cfg['data']['pointcloud_chamfer_file'],
-    #     multi_files=cfg['data']['multi_files']
-    # )
-    # fields = {
-    #     'points_iou': points_field,
-    #     'pointcloud_chamfer': pointcloud_field,
-    #     'idx': data.IndexField(),
-    # }
-    #
-    # print('Test split: ', cfg['data']['test_split'])
-    #
-    # dataset_folder = cfg['data']['path']
-    # dataset = data.Shapes3dDataset(
-    #     dataset_folder,
-    #     fields,
-    #     cfg['data']['test_split'],
-    #     categories=cfg['data']['classes'],
-    #     cfg=cfg)
 
-    # Evaluator
-    # evaluator = MeshEvaluator(n_points=100000)
-
-    # Loader
-    n_jobs = cfg['test']['n_workers']
+    n_jobs = cpu_count()
     test_loader = torch.utils.data.DataLoader(dataset,
                                               batch_size=1,
                                               num_workers=n_jobs,
-                                              shuffle=False,
                                               collate_fn=data.collate_remove_none,
-                                              worker_init_fn=data.worker_init_reset_seed)
+                                              worker_init_fn=data.worker_init_reset_seed,
+                                              generator=torch.Generator().manual_seed(0))
 
     # Evaluate all classes
     eval_dicts = []
