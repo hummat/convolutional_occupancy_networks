@@ -281,8 +281,6 @@ def heterogeneous_batching(batch):
         batch[x]["inputs"] = i
         if n:
             batch[x]["inputs.normals"] = n
-        else:
-            batch[x].pop("inputs.normals")
     return data.dataloader.default_collate(batch)
 
 
