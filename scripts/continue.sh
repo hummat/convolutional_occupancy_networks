@@ -29,13 +29,15 @@ start_time=$(date +%s)
 echo "Job Started at $(date)"
 
 CONFIG="$1"
-WEIGHTS="${2:-''}"
+CHECKPOINT="${2:-''}"
+ID="${3:-''}"
 
 echo "config: $CONFIG"
-echo "weights: $WEIGHTS"
+echo "checkpoint: $CHECKPOINT"
+echo "id: $ID"
 
 cd /net/rmc-lx0038/home_local/git/convolutional_occupancy_networks || return
-python train_lightning.py "$CONFIG" --checkpoint "$WEIGHTS" --early_stopping --wandb --no_progress --prefetch_factor 1 --pin_memory
+python train_lightning.py "$CONFIG" --checkpoint "$CHECKPOINT" --id "$ID" --early_stopping --resume --wandb --no_progress --prefetch_factor 1 --pin_memory
 
 echo "Job ended at $(date)"
 end_time=$(date +%s)
