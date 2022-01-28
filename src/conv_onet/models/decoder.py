@@ -115,22 +115,29 @@ class PatchLocalDecoder(nn.Module):
 
     """
 
-    def __init__(self, dim=3, c_dim=128,
-                 hidden_size=256, leaky=False, n_blocks=5, sample_mode='bilinear', local_coord=False,
-                 pos_encoding='linear', unit_size=0.1, padding=0.1):
+    def __init__(self,
+                 dim=3,
+                 c_dim=128,
+                 hidden_dim=256,
+                 leaky=False,
+                 n_blocks=5,
+                 sample_mode='bilinear',
+                 local_coord=False,
+                 pos_encoding='linear',
+                 unit_size=0.1):
         super().__init__()
         self.c_dim = c_dim
         self.n_blocks = n_blocks
 
         if c_dim != 0:
             self.fc_c = nn.ModuleList([
-                nn.Linear(c_dim, hidden_size) for i in range(n_blocks)
+                nn.Linear(c_dim, hidden_dim) for i in range(n_blocks)
             ])
 
         # self.fc_p = nn.Linear(dim, hidden_dim)
-        self.fc_out = nn.Linear(hidden_size, 1)
+        self.fc_out = nn.Linear(hidden_dim, 1)
         self.blocks = nn.ModuleList([
-            ResnetBlockFC(hidden_size) for i in range(n_blocks)
+            ResnetBlockFC(hidden_dim) for i in range(n_blocks)
         ])
 
         if not leaky:
@@ -146,9 +153,9 @@ class PatchLocalDecoder(nn.Module):
             self.map2local = None
 
         if pos_encoding == 'sin_cos':
-            self.fc_p = nn.Linear(60, hidden_size)
+            self.fc_p = nn.Linear(60, hidden_dim)
         else:
-            self.fc_p = nn.Linear(dim, hidden_size)
+            self.fc_p = nn.Linear(dim, hidden_dim)
 
     def sample_feature(self, xy, c, fea_type='2d'):
         if fea_type == '2d':
@@ -162,7 +169,7 @@ class PatchLocalDecoder(nn.Module):
                 -1).squeeze(-1)
         return c
 
-    def forward(self, p, c_plane, **kwargs):
+    def forward(self, p, c_plane):
         p_n = p['p_n']
         p = p['p']
 
