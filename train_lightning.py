@@ -253,7 +253,8 @@ def main():
     print(f"Number of train batches:", n_train_batches)
     print(f"Evaluating every {validate_every} steps")
     print(f"Evaluating every {eval_every_n_epochs} epochs")
-    print(f"Visualizing every {vis_every_n_evals} evaluations")
+    if args.visualize:
+        print(f"Visualizing every {vis_every_n_evals} evaluations")
     print(f"Training for max. {max_steps} steps")
     print(f"Training for max. {max_epochs} epochs")
     print(f"Logging every {print_every} steps")
