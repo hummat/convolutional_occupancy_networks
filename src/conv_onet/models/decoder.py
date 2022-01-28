@@ -127,6 +127,7 @@ class PatchLocalDecoder(nn.Module):
                  unit_size=0.1,
                  **kwargs: Any):
         super().__init__()
+        self.kwargs = kwargs
         self.c_dim = c_dim
         self.n_blocks = n_blocks
 
