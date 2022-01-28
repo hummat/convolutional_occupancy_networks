@@ -29,8 +29,8 @@ start_time=$(date +%s)
 echo "Job Started at $(date)"
 
 CONFIG="$1"
-CHECKPOINT="${2:-''}"
-ID="${3:-''}"
+CHECKPOINT="$2"
+ID="$3"
 
 echo "config: $CONFIG"
 echo "checkpoint: $CHECKPOINT"
