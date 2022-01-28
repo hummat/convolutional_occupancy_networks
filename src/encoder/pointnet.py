@@ -1,3 +1,5 @@
+from typing import Any
+
 import torch
 import torch.nn as nn
 from torch_scatter import scatter_mean, scatter_max
@@ -41,7 +43,8 @@ class LocalPoolPointnet(nn.Module):
                  grid_resolution=None,
                  plane_type='xz',
                  padding=0.1,
-                 n_blocks=5):
+                 n_blocks=5,
+                 **kwargs: Any):
         super().__init__()
         self.c_dim = c_dim
 
@@ -193,10 +196,24 @@ class PatchLocalPoolPointnet(nn.Module):
         unit_size (float): defined voxel unit size for local system
     """
 
-    def __init__(self, c_dim=128, dim=3, hidden_dim=128, scatter_type='max',
-                 unet=False, unet_kwargs=None, unet3d=False, unet3d_kwargs=None,
-                 plane_resolution=None, grid_resolution=None, plane_type='xz', padding=0.1, n_blocks=5,
-                 local_coord=False, pos_encoding='linear', unit_size=0.1):
+    def __init__(self,
+                 c_dim=128,
+                 dim=3,
+                 hidden_dim=128,
+                 scatter_type='max',
+                 unet=False,
+                 unet_kwargs=None,
+                 unet3d=False,
+                 unet3d_kwargs=None,
+                 plane_resolution=None,
+                 grid_resolution=None,
+                 plane_type='xz',
+                 padding=0.1,
+                 n_blocks=5,
+                 local_coord=False,
+                 pos_encoding='linear',
+                 unit_size=0.1,
+                 **kwargs: Any):
         super().__init__()
         self.c_dim = c_dim
 
