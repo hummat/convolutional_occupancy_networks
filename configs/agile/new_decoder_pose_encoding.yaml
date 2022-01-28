@@ -1,7 +1,0 @@
-inherit_from: configs/agile/shapenet_grid32_depth_like_world.yaml
-model:
-  local_coord: false
-  pos_encoding: sin_cos
-  decoder: simple_local_crop
-training:
-  out_dir: out/agile/new_decoder_pos_encoding
