@@ -1,5 +1,7 @@
 inherit_from: configs/agile/shapenet_grid32_depth_like_world.yaml
 model:
   c_dim: 64
+  unet3d_kwargs:
+    in_channels: 64
 training:
   out_dir: out/agile/more_features
