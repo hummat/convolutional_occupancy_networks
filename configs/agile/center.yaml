@@ -1,0 +1,5 @@
+inherit_from: configs/agile/shapenet_grid32_depth_like_world.yaml
+data:
+  normalize: center
+training:
+  out_dir: out/agile/center

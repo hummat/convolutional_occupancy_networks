@@ -1,0 +1,6 @@
+inherit_from: configs/agile/shapenet_grid32_depth_like_world.yaml
+data:
+  normalize: center
+  padding: 0.5
+training:
+  out_dir: out/agile/center_more_padding

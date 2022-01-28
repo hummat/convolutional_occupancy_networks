@@ -13,7 +13,7 @@ class LocalDecoder(nn.Module):
     Args:
         dim (int): input dimension
         c_dim (int): dimension of latent conditioned code c
-        hidden_size (int): hidden size of Decoder network
+        hidden_dim (int): hidden size of Decoder network
         n_blocks (int): number of blocks ResNetBlockFC layers
         leaky (bool): whether to use leaky ReLUs
         sample_mode (str): sampling feature strategy, bilinear|nearest
@@ -23,7 +23,7 @@ class LocalDecoder(nn.Module):
     def __init__(self,
                  dim=3,
                  c_dim=128,
-                 hidden_size=256,
+                 hidden_dim=256,
                  n_blocks=5,
                  leaky=False,
                  sample_mode='bilinear',
@@ -36,13 +36,13 @@ class LocalDecoder(nn.Module):
         self.n_blocks = n_blocks
 
         if c_dim != 0:
-            self.fc_c = nn.ModuleList([nn.Linear(c_dim, hidden_size) for i in range(n_blocks)])
+            self.fc_c = nn.ModuleList([nn.Linear(c_dim, hidden_dim) for i in range(n_blocks)])
 
-        self.fc_p = nn.Linear(dim, hidden_size)
+        self.fc_p = nn.Linear(dim, hidden_dim)
 
-        self.blocks = nn.ModuleList([ResnetBlockFC(hidden_size) for _ in range(n_blocks)])
+        self.blocks = nn.ModuleList([ResnetBlockFC(hidden_dim) for _ in range(n_blocks)])
 
-        self.fc_out = nn.Linear(hidden_size, 1)
+        self.fc_out = nn.Linear(hidden_dim, 1)
 
         if not leaky:
             self.actvn = F.relu
@@ -127,7 +127,7 @@ class PatchLocalDecoder(nn.Module):
                 nn.Linear(c_dim, hidden_size) for i in range(n_blocks)
             ])
 
-        # self.fc_p = nn.Linear(dim, hidden_size)
+        # self.fc_p = nn.Linear(dim, hidden_dim)
         self.fc_out = nn.Linear(hidden_size, 1)
         self.blocks = nn.ModuleList([
             ResnetBlockFC(hidden_size) for i in range(n_blocks)

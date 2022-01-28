@@ -532,7 +532,7 @@ class positional_encoding(object):
     def __call__(self, p):
         if self.func == 'sin_cos':
             out = []
-            p = 2.0 * p - 1.0  # chagne to the range [-1, 1]
+            p = 2.0 * p - 1.0  # change to the range [-1, 1]
             for freq in self.freq_bands:
                 out.append(torch.sin(freq * p))
                 out.append(torch.cos(freq * p))

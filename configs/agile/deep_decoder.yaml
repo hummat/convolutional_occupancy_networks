@@ -1,0 +1,6 @@
+inherit_from: configs/agile/shapenet_grid32_depth_like_world.yaml
+model:
+  decoder_kwargs:
+    n_blocks: 10
+training:
+  out_dir: out/agile/deep_decoder

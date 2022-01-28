@@ -205,7 +205,8 @@ def main():
     parser.add_argument("--weights", type=str, help="Path to pre-trained weights.")
     parser.add_argument("--checkpoint", type=str, help="Path to PyTorch Lightning checkpoint.")
     parser.add_argument("--resume", action="store_true", help="Resume training instead of starting from scratch.")
-    parser.add_argument("--early_stopping", action="store_true", help="Terminate if validation loss stops improving.")
+    parser.add_argument("--early_stopping", type=str, default="val_iou", options=["val_iou", "val_loss"],
+                        help="Terminate if validation loss or iou stops improving.")
     parser.add_argument("--auto_lr", action="store_true", help="Tune learning rate automatically.")
     parser.add_argument("--auto_batch_size", action="store_true", help="Tune batch size automatically.")
     parser.add_argument("--test", action="store_true", help="Runs evaluation on the test set after training.")
@@ -235,6 +236,7 @@ def main():
     visualize_every = cfg["training"]["visualize_every"]
     print_every = cfg["training"]["print_every"]
 
+    os.makedirs(out_dir, exist_ok=True)
     split_out_dir = out_dir.split('/')
     save_dir = '/'.join(split_out_dir[:-1])
     name = split_out_dir[-1]
@@ -278,9 +280,9 @@ def main():
     patience = max_epochs // int(np.ceil(eval_every_n_epochs)) // 10
     if args.early_stopping and patience >= 3:
         print(f"Will terminate after {patience} evaluations without improvement")
-        print("(1/10th of all planned evaluations)")
-        callbacks.append(EarlyStopping(monitor="val_loss",
-                                       mode="min",
+        metric = args.early_stopping
+        callbacks.append(EarlyStopping(monitor=metric,
+                                       mode="max" if metric == "val_iou" else "min",
                                        patience=patience,
                                        verbose=args.verbose))
 

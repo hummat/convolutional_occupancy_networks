@@ -252,15 +252,7 @@ class Shapes3dDataset(data.Dataset):
 
 
 def collate_remove_none(batch):
-    """ Collater that puts each data field into a tensor with outer dimension
-        batch size.
-
-    Args:
-        batch: batch
-    """
-    # batch = list(filter(lambda x: x is not None, batch))
-    for i, instance in enumerate(batch):
-        batch[i] = {k: v for k, v in instance.items() if v is not None}
+    batch = [{k: v for k, v in instance.items() if v is not None} for instance in batch]
     return data.dataloader.default_collate(batch)
 
 
@@ -270,17 +262,16 @@ def heterogeneous_batching(batch):
         normals = [torch.from_numpy(instance["inputs.normals"]) for instance in batch]
     else:
         normals = None
-    pcds = Pointclouds(inputs, normals)
+    pcds = Pointclouds(inputs, normals).subsample(640 * 480)
     inputs = pcds.points_padded()
     if normals:
         normals = pcds.normals_padded()
-    else:
-        normals = [None] * len(batch)
-
-    for x, (i, n) in enumerate(zip(inputs, normals)):
-        batch[x]["inputs"] = i
-        if n:
+        for x, (i, n) in enumerate(zip(inputs, normals)):
+            batch[x]["inputs"] = i
             batch[x]["inputs.normals"] = n
+    else:
+        for x, i in enumerate(inputs):
+            batch[x]["inputs"] = i
     return data.dataloader.default_collate(batch)
 
 

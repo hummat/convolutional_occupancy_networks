@@ -1,0 +1,19 @@
+inherit_from: configs/agile/shapenet_grid32_depth_like_world.yaml
+data:
+  classes: [ "02876657" ]
+  path: data/ShapeNet/extra
+  input_type: blenderproc
+  path_prefix: "/home/matthias/Data2/datasets/shapenet/depth"
+  pointcloud_n: null
+  pointcloud_noise: 0.0001
+  normalize: center
+training:
+  out_dir: out/agile/test
+  batch_size: 4
+  batch_size_val: 4
+  print_every: 10
+  visualize_every: 2000
+  validate_every: 1000
+  max_iter: 100000
+generation:
+  vis_n_outputs: 10
