@@ -242,7 +242,10 @@ def main():
     name = split_out_dir[-1]
     project = split_out_dir[-2]
 
-    dataset = LitDataModule(cfg, args.num_workers, args.prefetch_factor, args.pin_memory, args.seed)
+    num_workers = args.num_workers
+    if num_workers == -1:
+        num_workers = cpu_count()
+    dataset = LitDataModule(cfg, num_workers, args.prefetch_factor, args.pin_memory, args.seed)
     dataset.setup()
 
     n_train_batches = int(np.ceil(len(dataset.train) / batch_size))

@@ -1,6 +1,12 @@
 inherit_from: configs/agile/shapenet_grid32_depth_like_world.yaml
 model:
   encoder_kwargs:
-    grid_resolution: 32
+    grid_resolution: 64
 training:
   out_dir: out/agile/high_res_grid
+  batch_size: 8
+  batch_size_val: 8
+  print_every: 40
+  visualize_every: 8000
+  validate_every: 4000
+  max_iter: 400000

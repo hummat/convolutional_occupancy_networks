@@ -30,12 +30,14 @@ echo "Job Started at $(date)"
 
 CONFIG="$1"
 WEIGHTS="$2"
+WORKERS="${3:--1}"
 
 echo "config: $CONFIG"
 echo "weights: $WEIGHTS"
+echo "workers: $WORKERS"
 
 cd /net/rmc-lx0038/home_local/git/convolutional_occupancy_networks || return
-python train_lightning.py "$CONFIG" --weights "$WEIGHTS" --early_stopping val_iou --wandb --no_progress --prefetch_factor 1 --pin_memory
+python train_lightning.py "$CONFIG" --weights "$WEIGHTS" --num_workers "$WORKERS" --early_stopping val_iou --wandb --no_progress --prefetch_factor 1 --pin_memory
 
 echo "Job ended at $(date)"
 end_time=$(date +%s)

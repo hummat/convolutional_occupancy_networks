@@ -4,7 +4,6 @@ model:
     n_blocks: 10
     hidden_dim: 64
     unet3d_kwargs:
-      f_maps: 64
       in_channels: 64
       out_channels: 64
   decoder_kwargs:
@@ -13,3 +12,9 @@ model:
   c_dim: 64
 training:
   out_dir: out/agile/big_model
+  batch_size: 16
+  batch_size_val: 16
+  print_every: 20
+  visualize_every: 4000
+  validate_every: 2000
+  max_iter: 200000
