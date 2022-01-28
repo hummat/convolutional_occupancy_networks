@@ -124,7 +124,8 @@ class PatchLocalDecoder(nn.Module):
                  sample_mode='bilinear',
                  local_coord=False,
                  pos_encoding='linear',
-                 unit_size=0.1):
+                 unit_size=0.1,
+                 **kwargs: Any):
         super().__init__()
         self.c_dim = c_dim
         self.n_blocks = n_blocks
