@@ -74,7 +74,7 @@ test:
   model_file: model_best.pt
   n_workers: 16
 generation:
-  batch_size: 10000000
+  batch_size: 1000000
   normals: false
   refinement_step: 0
   vis_n_outputs: 30

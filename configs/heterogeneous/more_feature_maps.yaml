@@ -1,0 +1,7 @@
+inherit_from: configs/agile/heterogeneous.yaml
+model:
+  encoder_kwargs:
+    unet3d_kwargs:
+      f_maps: 64
+training:
+  out_dir: out/heterogeneous/more_feature_maps

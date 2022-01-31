@@ -1,0 +1,8 @@
+inherit_from: configs/agile/heterogeneous.yaml
+model:
+  encoder_kwargs:
+    hidden_dim: 64
+  decoder_kwargs:
+    hidden_dim: 64
+training:
+  out_dir: out/heterogeneous/wide_model

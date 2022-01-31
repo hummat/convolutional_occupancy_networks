@@ -1,0 +1,5 @@
+inherit_from: configs/agile/heterogeneous.yaml
+data:
+  normalize: center
+training:
+  out_dir: out/heterogeneous/center

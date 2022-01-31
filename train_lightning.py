@@ -7,11 +7,13 @@ import glob
 import numpy as np
 import torch
 import torch.nn.functional as F
+from trimesh import load_mesh
 from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, RichModelSummary, RichProgressBar
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
+import wandb
 
 from src import config, data
 from src.common import compute_iou
@@ -41,6 +43,7 @@ class LitConvOnet(pl.LightningModule):
             self.generator = config.get_generator(self.model, self.cfg, device=None)
             self.vis_data = dict()
             self.model_counter = defaultdict(int)
+            self.vis_this_eval = False
 
     def generate_mesh(self, inputs):
         if not isinstance(inputs, torch.Tensor):
@@ -70,7 +73,8 @@ class LitConvOnet(pl.LightningModule):
                                                      "instance": instance}]
 
                     mesh = self.generate_mesh(inputs)
-                    mesh.export(os.path.join(self.vis_path, f"{self.global_step}_{category_name}_{instance}.off"))
+                    if len(mesh.faces) > 0 and len(mesh.vertices) > 0:
+                        mesh.export(os.path.join(self.vis_path, f"{self.global_step}_{category_name}_{instance}.obj"))
                 self.model_counter[category_id] += 1
         elif batch_idx in self.vis_data:
             for batch_data in self.vis_data[batch_idx]:
@@ -79,17 +83,22 @@ class LitConvOnet(pl.LightningModule):
                 instance = batch_data["instance"]
 
                 mesh = self.generate_mesh(inputs)
-                mesh.export(os.path.join(self.vis_path, f"{self.global_step}_{category_name}_{instance}.off"))
+                if len(mesh.faces) > 0 and len(mesh.vertices) > 0:
+                    mesh.export(os.path.join(self.vis_path, f"{self.global_step}_{category_name}_{instance}.obj"))
 
     def forward(self, x):
         return self.model(**x)
+
+    def on_fit_start(self):
+        if self.visualize:
+            self.generator.device = self.device
 
     def on_train_start(self):
         self.n_evals = 0
         if self.visualize:
             self.vis_data = dict()
             self.model_counter = defaultdict(int)
-            meshes = glob.glob(os.path.join(self.vis_path, f"{self.global_step}*.off"))
+            meshes = glob.glob(os.path.join(self.vis_path, f"{self.global_step}*.obj"))
             for mesh in meshes:
                 os.remove(mesh)
 
@@ -101,8 +110,9 @@ class LitConvOnet(pl.LightningModule):
         return loss
 
     def on_validation_start(self):
-        if self.visualize:
-            self.generator.device = self.device
+        self.vis_this_eval = False
+        if self.visualize and self.n_evals % self.vis_every_n_evals == 0:
+            self.vis_this_eval = True
 
     def validation_step(self, batch, batch_idx):
         out = self({"points": batch.get("points_iou"), "inputs": batch.get("inputs")})
@@ -115,7 +125,7 @@ class LitConvOnet(pl.LightningModule):
         iou = compute_iou(occ_iou_np, occ_iou_hat_np).mean()
         self.log("val_iou", iou, prog_bar=True, batch_size=self.cfg["training"]["batch_size_val"])
 
-        if self.visualize and self.n_evals % self.vis_every_n_evals == 0:
+        if self.vis_this_eval:
             self.visualize_data(batch, batch_idx)
         return loss
 
@@ -199,6 +209,32 @@ class LitDataModule(pl.LightningDataModule):
                                            generator=self.generator)
 
 
+class WandbVisualizeCallback(pl.Callback):
+    def on_validation_epoch_end(self, trainer, pl_module):
+        if pl_module.vis_this_eval:
+            vis_data = pl_module.vis_data
+            vis_path = pl_module.vis_path
+            paths = list()
+            names = list()
+            instances = list()
+            for batch_idx in vis_data.keys():
+                for batch_data in vis_data[batch_idx]:
+                    category_name = batch_data["category_name"]
+                    instance = batch_data["instance"]
+                    mesh_path = os.path.join(vis_path, f"{trainer.global_step}_{category_name}_{instance}.obj")
+                    if os.path.isfile(mesh_path):
+                        paths.append(mesh_path)
+                        names.append(category_name)
+                        instances.append(instance)
+
+            if paths:
+                trainer.logger.experiment.log({
+                    "vis/completion": [wandb.Object3D(p,
+                                                      caption=f"{n}_{i}") for p, n, i in zip(paths, names, instances)],
+                    "global_step": trainer.global_step
+                })
+
+
 def main():
     parser = argparse.ArgumentParser(description="Train a 3D reconstruction model.")
     parser.add_argument("config", type=str, help="Path to config file.")
@@ -211,8 +247,11 @@ def main():
     parser.add_argument("--auto_batch_size", action="store_true", help="Tune batch size automatically.")
     parser.add_argument("--test", action="store_true", help="Runs evaluation on the test set after training.")
     parser.add_argument("--wandb", action="store_true", help="Use the weights & biases logger.")
+    parser.add_argument("--name", type=str, help="The name of the train run.")
+    parser.add_argument("--project", type=str, help="The name of project.")
     parser.add_argument("--id", type=str, help="The weights & biases run id.")
     parser.add_argument("--offline", action="store_true", help="Log offline.")
+    parser.add_argument("--precision", type=int, default=32, help="Train with float16, 32 or 64 precision.")
     parser.add_argument("--profile", action="store_true", help="Profile code to find bottlenecks.")
     parser.add_argument("--no_progress", action="store_true", help="Disable progress bar.")
     parser.add_argument("--pin_memory", action="store_true", help="Enable GPU memory pinning in data loaders.")
@@ -239,8 +278,8 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
     split_out_dir = out_dir.split('/')
     save_dir = '/'.join(split_out_dir[:-1])
-    name = split_out_dir[-1]
-    project = split_out_dir[-2]
+    name = args.name if args.name else split_out_dir[-1]
+    project = args.project if args.project else split_out_dir[-2]
 
     num_workers = args.num_workers
     if num_workers == -1:
@@ -292,11 +331,13 @@ def main():
 
     if args.wandb:
         logger = WandbLogger(name=name,
-                             save_dir=save_dir,
+                             save_dir='/'.join(split_out_dir[:-2]),
                              offline=args.offline,
                              id=args.id,
                              project=project)
         logger.watch(conv_onet)
+        if args.visualize:
+            callbacks.append(WandbVisualizeCallback())
     else:
         logger = TensorBoardLogger(save_dir=save_dir, name=name)
     logger.log_hyperparams(cfg)
@@ -312,6 +353,7 @@ def main():
                          check_val_every_n_epoch=int(np.ceil(eval_every_n_epochs)),
                          val_check_interval=validate_every if eval_every_n_epochs < 1.0 else 1.0,
                          log_every_n_steps=print_every,
+                         precision=args.precision,
                          profiler="simple" if args.profile else None,
                          auto_lr_find=args.auto_lr,
                          auto_scale_batch_size=args.auto_batch_size)

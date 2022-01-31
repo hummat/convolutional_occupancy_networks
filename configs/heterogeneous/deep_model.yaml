@@ -1,0 +1,8 @@
+inherit_from: configs/agile/heterogeneous.yaml
+model:
+  encoder_kwargs:
+    n_blocks: 10
+  decoder_kwargs:
+    n_blocks: 10
+training:
+  out_dir: out/heterogeneous/deep_model

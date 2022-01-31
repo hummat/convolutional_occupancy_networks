@@ -1,0 +1,5 @@
+inherit_from: configs/heterogeneous/heterogeneous.yaml
+data:
+  padding: 0.5
+training:
+  out_dir: out/heterogeneous/center_padding_5

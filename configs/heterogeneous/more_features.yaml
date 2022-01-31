@@ -1,0 +1,9 @@
+inherit_from: configs/agile/heterogeneous.yaml
+model:
+  encoder_kwargs:
+    unet3d_kwargs:
+      in_channels: 64
+      out_channels: 64
+  c_dim: 64
+training:
+  out_dir: out/heterogeneous/more_features
