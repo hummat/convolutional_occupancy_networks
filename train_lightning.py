@@ -241,7 +241,7 @@ def main():
     parser.add_argument("--weights", type=str, help="Path to pre-trained weights.")
     parser.add_argument("--checkpoint", type=str, help="Path to PyTorch Lightning checkpoint.")
     parser.add_argument("--resume", action="store_true", help="Resume training instead of starting from scratch.")
-    parser.add_argument("--early_stopping", type=str, default="", choices=["", "val_iou", "val_loss"],
+    parser.add_argument("--early_stopping", type=str, default="none", choices=["none", "val_iou", "val_loss"],
                         help="Terminate if validation loss or iou stops improving.")
     parser.add_argument("--auto_lr", action="store_true", help="Tune learning rate automatically.")
     parser.add_argument("--auto_batch_size", action="store_true", help="Tune batch size automatically.")
@@ -321,7 +321,7 @@ def main():
     if not args.no_progress:
         callbacks.append(RichProgressBar())
     patience = max_epochs // int(np.ceil(eval_every_n_epochs)) // 10
-    if args.early_stopping and patience >= 3:
+    if args.early_stopping is not "none" and patience >= 3:
         print(f"Will terminate after {patience} evaluations without improvement")
         metric = args.early_stopping
         callbacks.append(EarlyStopping(monitor=metric,
