@@ -31,7 +31,7 @@ echo "Job Started at $(date)"
 CONFIG="$1"
 WEIGHTS="$2"
 STOP="${3:-val_iou}"
-WORKERS="${5:--1}"
+WORKERS="${4:--1}"
 
 echo "config: $CONFIG"
 echo "weights: $WEIGHTS"
