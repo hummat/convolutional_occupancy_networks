@@ -1,0 +1,19 @@
+inherit_from: configs/pointcloud/shapenet_grid32_depth_like_world_center.yaml
+data:
+  classes: [ "02876657" ]
+  path: data/ShapeNet/extra
+  input_type: blenderproc
+  path_prefix: /home/matthias/Data2/datasets/shapenet/depth
+  pointcloud_n: null
+training:
+  out_dir: out/bottle/blenderproc_heterogeneous
+  batch_size: 4
+  batch_size_val: 4
+  print_every: 80
+  visualize_every: 8000
+  validate_every: 8000
+  checkpoint_every: 8000
+  backup_every: 8000
+  max_iter: 160000
+generation:
+  vis_n_outputs: 10

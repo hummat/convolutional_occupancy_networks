@@ -1,0 +1,7 @@
+inherit_from: configs/agile/heterogeneous.yaml
+model:
+  encoder_kwargs:
+    n_blocks: 10
+    hidden_dim: 64
+training:
+  out_dir: out/encoder/wide_deep

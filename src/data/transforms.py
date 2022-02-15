@@ -1,8 +1,9 @@
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import trimesh
+import open3d as o3d
 
 
 class Rotate(object):
@@ -13,11 +14,13 @@ class Rotate(object):
     def __init__(self,
                  to_cam_frame: bool = False,
                  to_world_frame: bool = False,
+                 axis: str = "",
                  visualize: bool = False):
         assert not (to_cam_frame and to_world_frame)
-        print("Rotating data")
+        print(f"Rotating data (to world: {to_world_frame}, to cam: {to_cam_frame})")
         self.to_cam_frame = to_cam_frame
         self.to_world_frame = to_world_frame
+        self.axis = axis
         self.visualize = visualize
 
     def __call__(self, data):
@@ -50,6 +53,8 @@ class Rotate(object):
             x_angle = data.get('inputs.x_angle')
             rot_x = R.from_euler('x', x_angle, degrees=True).as_matrix()
             rot = rot_x.T @ rot
+        elif self.axis:
+            rot = R.from_euler(self.axis, np.random.uniform(360), degrees=True).as_matrix()
         else:
             rot = R.random().as_matrix()
 
@@ -88,7 +93,8 @@ class PointcloudNoise(object):
     """
 
     def __init__(self, stddev: float):
-        print(f"Adding noise to pointcloud (STD={stddev})")
+        if stddev > 0:
+            print(f"Adding noise to pointcloud (STD={stddev})")
         self.stddev = stddev
 
     def __call__(self, data):
@@ -97,6 +103,8 @@ class PointcloudNoise(object):
         Args:
             data (dictionary): data dictionary
         """
+        if self.stddev <= 0:
+            return data
         data_out = data.copy()
         points = data[None]
         noise = self.stddev * np.random.randn(*points.shape)
@@ -117,8 +125,6 @@ class SubsamplePointcloud(object):
     def __init__(self, N):
         if N:
             print(f"Subsampling pointcloud (N={N})")
-        else:
-            print(f"No pointcloud subsampling.")
         self.N = N
 
     def __call__(self, data):
@@ -145,6 +151,74 @@ class SubsamplePointcloud(object):
         return data_out
 
 
+class VoxelizeInputs(object):
+    def __init__(self, voxel_size: Union[float, Tuple[float, float]] = 0.002):
+        print(f"Voxelizing inputs (voxel_size={voxel_size})")
+        self.voxel_size = voxel_size
+
+    def __call__(self, data):
+        data_out = data.copy()
+        points = data.get("inputs")
+        normals = data.get("inputs.normals")
+        scale = data.get("inputs.scale")
+
+        voxel_size = self.voxel_size
+        if isinstance(self.voxel_size, (tuple, list)):
+            voxel_size = np.random.uniform(self.voxel_size[0], self.voxel_size[1])
+
+        if scale is not None:
+            points *= scale
+
+        pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
+        if normals is not None:
+            pcd.normals = o3d.utility.Vector3dVector(normals)
+        pcd = pcd.voxel_down_sample(voxel_size)
+        points = np.asarray(pcd.points, dtype=np.float32)
+
+        if scale is not None:
+            points /= scale
+
+        data_out["inputs"] = points
+        if normals is not None:
+            data_out["inputs.normals"] = np.asarray(pcd.normals, dtype=np.float32)
+
+        return data_out
+
+
+class VoxelizePointcloud(object):
+    def __init__(self, voxel_size: Union[float, Tuple[float, float]] = 0.002):
+        print(f"Voxelizing pointcloud (voxel_size={voxel_size})")
+        self.voxel_size = voxel_size
+
+    def __call__(self, data):
+        data_out = data.copy()
+        points = data[None]
+        normals = data.get("normals")
+        scale = data.get("scale")
+
+        voxel_size = self.voxel_size
+        if isinstance(self.voxel_size, (tuple, list)):
+            voxel_size = np.random.uniform(self.voxel_size[0], self.voxel_size[1])
+
+        if scale is not None:
+            points *= scale
+
+        pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
+        if normals is not None:
+            pcd.normals = o3d.utility.Vector3dVector(normals)
+        pcd = pcd.voxel_down_sample(voxel_size)
+        points = np.asarray(pcd.points, dtype=np.float32)
+
+        if scale is not None:
+            points /= scale
+
+        data_out[None] = points
+        if normals is not None:
+            data_out['normals'] = np.asarray(pcd.normals, dtype=np.float32)
+
+        return data_out
+
+
 class Normalize(object):
     def __init__(self, center: str = "xyz", scale: bool = True, to_min_val: str = "", to_max_val: str = ""):
         print(f"Normalizing data (centering: {center}, scaling: {scale})")
@@ -163,82 +237,146 @@ class Normalize(object):
         inputs = data.get("inputs")
 
         scale = (inputs.max(axis=0) - inputs.min(axis=0)).max()
-        _loc = (inputs.max(axis=0) + inputs.min(axis=0)) / 2
+        loc = (inputs.max(axis=0) + inputs.min(axis=0)) / 2
         min_vals = inputs.min(axis=0)
         max_vals = inputs.max(axis=0)
+        loc_x = loc_y = loc_z = 0
 
-        loc = np.zeros(3)
-        if 'x' in self.center:
-            loc[0] = _loc[0]
-        if 'y' in self.center:
-            loc[1] = _loc[1]
-        if 'z' in self.center:
-            loc[2] = _loc[2]
+        if self.center:
+            loc_x = loc[0] if 'x' in self.center else loc_x
+            loc_y = loc[1] if 'y' in self.center else loc_y
+            loc_z = loc[2] if 'z' in self.center else loc_z
 
-        if 'x' in self.to_min_val:
-            loc[0] = min_vals[0]
-        if 'y' in self.to_min_val:
-            loc[1] = min_vals[1]
-        if 'z' in self.to_min_val:
-            loc[2] = min_vals[2]
+        if self.to_min_val:
+            loc_x = min_vals[0] if 'x' in self.to_min_val else loc_x
+            loc_y = min_vals[1] if 'y' in self.to_min_val else loc_y
+            loc_z = min_vals[2] if 'z' in self.to_min_val else loc_z
 
-        if 'x' in self.to_max_val:
-            loc[0] = max_vals[0]
-        if 'y' in self.to_max_val:
-            loc[1] = max_vals[1]
-        if 'z' in self.to_max_val:
-            loc[2] = max_vals[2]
+        if self.to_max_val:
+            loc_x = max_vals[0] if 'x' in self.to_max_val else loc_x
+            loc_y = max_vals[1] if 'y' in self.to_max_val else loc_y
+            loc_z = max_vals[2] if 'z' in self.to_max_val else loc_z
+
+        loc = np.array([loc_x, loc_y, loc_z])
 
         for k, v in zip(["points", "points_iou", "pointcloud", "pointcloud_chamfer", "inputs"],
                         [points, points_iou, pointcloud, pointcloud_chamfer, inputs]):
             if v is not None:
-                data_out[k] = (v - loc).astype(np.float32)
+                v = (v - loc).astype(np.float32)
                 if self.scale:
-                    data_out[k] = (v / scale).astype(np.float32)
+                    v = (v / scale).astype(np.float32)
+                data_out[k] = v
 
         return data_out
 
 
 class Scale(object):
     def __init__(self,
-                 scale_range: Optional[Tuple[float, float]] = None,
-                 add_points: bool = False,
-                 box_size: float = 1.1):
-        if scale_range:
-            print(f"Randomly scaling data (range={scale_range})")
+                 axes: str = "xyz",
+                 amount: Optional[Union[float, Tuple[float, float], Tuple[float, float, float], None]] = None,
+                 random: Optional[bool] = False,
+                 from_input: Optional[bool] = False):
+        if from_input:
+            print("Scaling data from input")
         else:
-            print(f"Scaling data")
-        self.scale_range = scale_range
-        self.add_points = add_points
-        self.box_size = box_size
+            print(f"Scaling {axes} by min/max (+-){amount}")
+        self.axes = axes
+        self.amount = amount
+        self.random = random
+        self.from_input = from_input
 
     def __call__(self, data):
+        if not self.axes:
+            print("Warning: Didn't provide any axes. Returning.")
+            return data
+
         data_out = data.copy()
 
-        points = data.get("points")
-        points_iou = data.get("points_iou")
-        pointcloud = data.get("pointcloud")
-        inputs = data.get("inputs")
-        scale = data.get("scale")
+        points = data.get('points')
+        points_iou = data.get('points_iou')
 
-        if scale is None and self.scale_range:
-            scale = np.random.uniform(*self.scale_range)
+        inputs = data.get('inputs')
+        normals = data.get('inputs.normals')
 
-        for k, v in zip(["points", "points_iou", "pointcloud", "inputs"],
-                        [points, points_iou, pointcloud, inputs]):
+        pcd = data.get('pointcloud')
+        pcd_normals = data.get('pointcloud.normals')
+
+        pcd_chamfer = data.get('pointcloud_chamfer')
+        pcd_chamfer_normals = data.get('pointcloud_chamfer.normals')
+
+        if self.from_input:
+            scale = data.get("scale")
+            if scale is None:
+                scale = data.get("inputs.scale")
+            if scale is None:
+                print("Warning: Didn't find 'scale' in data. Returning.")
+                return data
+            else:
+                if isinstance(scale, float):
+                    scale_x = scale if 'x' in self.axes else 1
+                    scale_y = scale if 'y' in self.axes else 1
+                    scale_z = scale if 'z' in self.axes else 1
+                elif isinstance(scale, (tuple, list, np.ndarray)) and len(scale) == 3 and len(self.axes) == 3:
+                    scale_x = scale[0] / scale[1]
+                    scale_y = 1
+                    scale_z = scale[2] / scale[1]
+                else:
+                    raise ValueError
+        elif self.amount is not None:
+            if isinstance(self.amount, (float, int)):
+                if self.random:
+                    scale_x = np.random.uniform(1 - self.amount, 1 + self.amount) if 'x' in self.axes else 1
+                    scale_y = np.random.uniform(1 - self.amount, 1 + self.amount) if 'y' in self.axes else 1
+                    scale_z = np.random.uniform(1 - self.amount, 1 + self.amount) if 'z' in self.axes else 1
+                else:
+                    scale_x = self.amount if 'x' in self.axes else 1
+                    scale_y = self.amount if 'y' in self.axes else 1
+                    scale_z = self.amount if 'z' in self.axes else 1
+            elif isinstance(self.amount, (tuple, list)):
+                if len(self.amount) == 2:
+                    if self.random:
+                        scale_x = np.random.uniform(1 - self.amount[0], 1 + self.amount[1]) if 'x' in self.axes else 1
+                        scale_y = np.random.uniform(1 - self.amount[0], 1 + self.amount[1]) if 'y' in self.axes else 1
+                        scale_z = np.random.uniform(1 - self.amount[0], 1 + self.amount[1]) if 'z' in self.axes else 1
+                    else:
+                        print(f"Warning: Scaling {self.axes} with {self.amount} is ambiguous. Returning.")
+                        return data
+                elif len(self.amount) == 3 and len(self.axes) == 3:
+                    if self.random:
+                        scale_x = np.random.uniform(1 - self.amount[0], 1 + self.amount[0])
+                        scale_y = np.random.uniform(1 - self.amount[1], 1 + self.amount[1])
+                        scale_z = np.random.uniform(1 - self.amount[2], 1 + self.amount[2])
+                    else:
+                        scale_x, scale_y, scale_z = self.amount
+                else:
+                    raise ValueError
+            else:
+                raise ValueError
+        else:
+            print("Warning: No scaling amount provided and not taken from input. Returning.")
+            return data
+
+        scale = np.array([scale_x, scale_y, scale_z])
+
+        for k, v in zip(['points',
+                         'points_iou',
+                         'pointcloud',
+                         'pointcloud.normals',
+                         'pointcloud_chamfer',
+                         'pointcloud_chamfer.normals',
+                         'inputs',
+                         'inputs.normals'],
+                        [points,
+                         points_iou,
+                         pcd,
+                         pcd_normals,
+                         pcd_chamfer,
+                         pcd_chamfer_normals,
+                         inputs,
+                         normals]):
             if v is not None:
                 data_out[k] = (v * scale).astype(np.float32)
 
-        if scale < 1 and self.add_points:
-            additional_points = np.random.rand(len(points), 3)
-            additional_points = self.box_size * (additional_points - 0.5)
-            additional_points = additional_points[(additional_points[:, 0] > scale / 2) | (additional_points[:, 0] < -scale / 2)]
-            additional_points = additional_points[(additional_points[:, 1] > scale / 2) | (additional_points[:, 1] < -scale / 2)]
-            additional_points = additional_points[(additional_points[:, 2] > scale / 2) | (additional_points[:, 2] < -scale / 2)]
-            data_out["points"] = np.concatenate([points, additional_points], axis=0).astype(np.float32)
-            data_out["points.occ"] = np.concatenate([data.get("points.occ"),
-                                                     np.zeros(len(additional_points))]).astype(np.float32)
-            
         return data_out
 
 

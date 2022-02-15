@@ -6,7 +6,8 @@ from datetime import datetime
 import numpy as np
 import yaml
 import torch
-from torch.utils import data
+from torch.utils.data.dataloader import default_collate
+from torch.utils.data import Dataset
 from pytorch3d.structures import Pointclouds
 
 from src.common import decide_total_volume_range, update_reso
@@ -38,7 +39,7 @@ class Field(object):
         raise NotImplementedError
 
 
-class Shapes3dDataset(data.Dataset):
+class Shapes3dDataset(Dataset):
     """ 3D Shapes dataset class.
     """
 
@@ -253,7 +254,7 @@ class Shapes3dDataset(data.Dataset):
 
 def collate_remove_none(batch):
     batch = [{k: v for k, v in instance.items() if v is not None} for instance in batch]
-    return data.dataloader.default_collate(batch)
+    return default_collate(batch)
 
 
 def heterogeneous_batching(batch):
@@ -272,7 +273,7 @@ def heterogeneous_batching(batch):
     else:
         for x, i in enumerate(inputs):
             batch[x]["inputs"] = i
-    return data.dataloader.default_collate(batch)
+    return default_collate(batch)
 
 
 def seed_all_rng(seed=None):

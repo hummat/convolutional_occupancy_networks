@@ -169,7 +169,10 @@ class LitDataModule(pl.LightningDataModule):
         self.pin_memory = pin_memory
         self.generator = torch.Generator()
         self.generator.manual_seed(seed)
-        self.collate_fn = default_collate if self.cfg["data"]["pointcloud_n"] else data.heterogeneous_batching
+        if self.cfg["data"]["pointcloud_n"] and not self.cfg["data"]["voxelize"]:
+            self.collate_fn = default_collate
+        else:
+            self.collate_fn = data.heterogeneous_batching
 
     def setup(self, stage=None):
         self.train = config.get_dataset("train", self.cfg)

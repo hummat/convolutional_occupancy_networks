@@ -26,7 +26,7 @@ model:
   decoder: simple_local
   decoder_kwargs:
     sample_mode: bilinear # bilinear / nearest
-    hidden_size: 32
+    hidden_dim: 32
   c_dim: 32
 training:
   pre_trained_weights: /home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks/out/pointcloud/shapenet_grid32_partial/model_best.pt

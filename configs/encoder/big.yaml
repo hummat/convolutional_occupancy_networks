@@ -1,0 +1,12 @@
+inherit_from: configs/agile/heterogeneous.yaml
+model:
+  encoder_kwargs:
+    n_blocks: 10
+    hidden_dim: 64
+  unet3d_kwargs:
+    f_maps: 64
+    in_channels: 64
+    out_channels: 64
+  c_dim: 64
+training:
+  out_dir: out/encoder/wide_deep_feat

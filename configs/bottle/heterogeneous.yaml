@@ -1,0 +1,14 @@
+inherit_from: configs/agile/heterogeneous.yaml
+data:
+  classes: [ "02876657" ]
+  path: data/ShapeNet/extra
+  normalize: center
+training:
+  out_dir: out/bottle/heterogeneous_center
+  visualize_every: 2000
+  validate_every: 2000
+  checkpoint_every: 2000
+  backup_every: 2000
+  max_iter: 40000
+generation:
+  vis_n_outputs: 10

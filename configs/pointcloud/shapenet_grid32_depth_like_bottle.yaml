@@ -9,6 +9,6 @@ training:
   validate_every: 1000
   checkpoint_every: 1000
   backup_every: 1000
-  max_iter: 20000
+  max_iter: 9000
 generation:
   vis_n_outputs: 10

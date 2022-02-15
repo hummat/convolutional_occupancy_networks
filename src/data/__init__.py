@@ -8,7 +8,7 @@ from src.data.fields import (
 )
 from src.data.transforms import (
     PointcloudNoise, SubsamplePointcloud,
-    SubsamplePoints, Rotate, Normalize, Scale
+    SubsamplePoints, Rotate, Normalize, Scale, VoxelizePointcloud, VoxelizeInputs
 )
 
 __all__ = [
@@ -32,5 +32,7 @@ __all__ = [
     SubsamplePoints,
     Rotate,
     Normalize,
-    Scale
+    Scale,
+    VoxelizePointcloud,
+    VoxelizeInputs
 ]

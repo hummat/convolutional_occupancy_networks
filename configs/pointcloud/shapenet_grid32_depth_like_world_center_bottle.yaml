@@ -11,6 +11,6 @@ training:
   print_every: 10
   checkpoint_every: 1000
   backup_every: 1000
-  max_iter: 20000
+  max_iter: 13000
 generation:
   vis_n_outputs: 10

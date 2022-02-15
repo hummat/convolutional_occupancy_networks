@@ -139,20 +139,33 @@ def get_dataset(mode, cfg, return_idx=False):
 
         visualize = cfg['data']['visualize']
         transform = list()
-        if cfg['data']['input_type'] in ['depth', 'depth_like', 'blenderproc']:
+        if cfg['data']['scale']:
+            scale = cfg['data']['scale']
+            if isinstance(scale, float):
+                transform.append(data.Scale(amount=scale))
+            elif isinstance(scale, (tuple, list)):
+                transform.append(data.Scale(amount=scale, random=True))
+            elif isinstance(scale, str):
+                if "input" in scale:
+                    transform.append(data.Scale(from_input=True))
+                else:
+                    transform.append(data.Scale(axes=scale, amount=0.5, random=True))
+        if cfg['data']['rotate']:
+            if isinstance(cfg['data']['rotate'], str):
+                transform.append(data.Rotate(axis=cfg['data']['rotate'], visualize=visualize))
+            else:
+                transform.append(data.Rotate(visualize=visualize))
+        if cfg['data']['input_type'] in ['partial_pointcloud', 'depth', 'depth_like', 'blenderproc']:
             if cfg['training']['in_cam_coords']:
                 transform.append(data.Rotate(to_cam_frame=True,
                                              visualize=visualize))
             elif cfg['training']['in_world_coords']:
                 transform.append(data.Rotate(to_world_frame=True,
                                              visualize=visualize))
-        if cfg['data']['rotate']:
-            transform.append(data.Rotate(visualize=visualize))
-        if cfg['data']['scale']:
-            scale = cfg['data']['scale']
-            if not isinstance(scale, (tuple, list)):
-                scale = (0.05, 0.5)
-            transform.append(data.Scale(scale))
+        if cfg['data']['voxelize']:
+            voxelize = cfg['data']['voxelize']
+            voxel_size = 0.002 if isinstance(voxelize, bool) else voxelize
+            transform.append(data.VoxelizeInputs(voxel_size))
         if cfg['data']['normalize']:
             norm = cfg['data']['normalize']
             if isinstance(norm, str):
@@ -182,7 +195,7 @@ def get_inputs_field(cfg):
     """
     input_type = cfg['data']['input_type']
 
-    transform = [data.SubsamplePointcloud(cfg['data']['pointcloud_n']),
+    transform = [data.SubsamplePointcloud(None if cfg['data']['voxelize'] else cfg['data']['pointcloud_n']),
                  data.PointcloudNoise(cfg['data']['pointcloud_noise'])]
     transform = transforms.Compose(transform)
 
@@ -196,7 +209,9 @@ def get_inputs_field(cfg):
         inputs_field = data.PartialPointCloudField(cfg['data']['pointcloud_file'],
                                                    transform,
                                                    cfg['data']['multi_files'],
-                                                   part_ratio=cfg['data']['part_ratio'])
+                                                   part_ratio=cfg['data']['part_ratio'],
+                                                   rotate_object='y',
+                                                   axes='z')
     elif input_type == 'depth_like':
         inputs_field = data.DepthLikePointCloudField(cfg['data']['mesh_file'] if cfg['data']['mesh_file'] else cfg['data']['pointcloud_file'],
                                                      rotate_object='yx',
@@ -209,7 +224,8 @@ def get_inputs_field(cfg):
                                                          transform=transform)
     elif input_type == 'blenderproc':
         inputs_field = data.BlenderProcDepthPointCloudField(transform=transform,
-                                                            path_prefix=cfg['data']['path_prefix'])
+                                                            path_prefix=cfg['data']['path_prefix'],
+                                                            fuse=cfg['data']['fuse'])
     elif input_type == 'pointcloud_crop':
         inputs_field = data.PatchPointCloudField(cfg['data']['pointcloud_file'], transform, None, cfg['data']['multi_files'])
     elif input_type == 'voxels':

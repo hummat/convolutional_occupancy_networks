@@ -5,15 +5,18 @@ data:
   input_type: blenderproc
   path_prefix: "/home/matthias/Data2/datasets/shapenet/depth"
   pointcloud_n: null
-  pointcloud_noise: 0.0001
-  normalize: center
+  pointcloud_noise: 0.001
+  normalize: true
+  voxelize: 0.002
+  fuse: [0, 5]
+  scale: "xz"
 training:
-  out_dir: out/agile/bottle/test
+  out_dir: out/agile/bottle/center_scale_heterogeneous_voxelize_fuse_0_5_distort
   batch_size: 8
   batch_size_val: 8
-  print_every: 20
-  visualize_every: 200
-  validate_every: 100
-  max_iter: 100000
+  print_every: 40
+  visualize_every: 2000
+  validate_every: 500
+  max_iter: 200000
 generation:
-  vis_n_outputs: 4
+  vis_n_outputs: 10

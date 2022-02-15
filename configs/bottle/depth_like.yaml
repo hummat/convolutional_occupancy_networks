@@ -1,0 +1,15 @@
+inherit_from: configs/pointcloud/shapenet_grid32_depth_like_upper.yaml
+data:
+  classes: [ "02876657" ]
+  path: data/ShapeNet/extra
+  normalize: center
+training:
+  out_dir: out/bottle/depth_like
+  print_every: 10
+  visualize_every: 1000
+  validate_every: 1000
+  checkpoint_every: 1000
+  backup_every: 1000
+  max_iter: 20000
+generation:
+  vis_n_outputs: 10

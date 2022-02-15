@@ -1,5 +1,5 @@
 import os
-from typing import Union
+from typing import Union, Tuple
 
 import numpy as np
 import open3d as o3d
@@ -347,12 +347,19 @@ class PartialPointCloudField(Field):
         part_ratio (float): max ratio for the remaining part
     """
 
-    def __init__(self, file_name, transform=None, multi_files=None, part_ratio=0.7, plane: bool = False):
+    def __init__(self,
+                 file_name,
+                 transform=None,
+                 multi_files=None,
+                 part_ratio=0.7,
+                 rotate_object: str = "",
+                 axes: str = "xyz"):
         self.file_name = file_name
         self.transform = transform
         self.multi_files = multi_files
         self.part_ratio = part_ratio
-        self.plane = plane
+        self.axes = axes
+        self.rotate_object = rotate_object
 
     def load(self, model_path, idx, category):
         """ Loads the data point.
@@ -377,20 +384,50 @@ class PartialPointCloudField(Field):
             points = pointcloud_dict.astype(np.float32)
             normals = None
 
-        if self.plane:
-            axes = np.random.choice([0, 1, 2], size=np.random.randint(1, 3))
-            if len(axes) == 1:
-                pass
-            indices = np.arange(len(points))  # Todo: Fix
-        else:
-            side = np.random.randint(3)
-            xb = [points[:, side].min(), points[:, side].max()]
-            length = np.random.uniform(self.part_ratio * (xb[1] - xb[0]), (xb[1] - xb[0]))
-            indices = (points[:, side] - xb[0]) <= length
+        rot = np.eye(3)
+        if self.rotate_object:
+            angles = np.random.uniform(360, size=len(self.rotate_object) if len(self.rotate_object) > 1 else None)
+            rot = Rotation.from_euler(self.rotate_object, angles, degrees=True).as_matrix()
 
-        data = {None: points[indices]}
+            points = (rot @ points.T).T
+            if normals is not None:
+                normals = (rot @ normals.T).T
+
+        if self.axes == "xyz":
+            side = np.random.randint(3)
+        else:
+            side = list()
+            if 'x' in self.axes:
+                side.append(0)
+            if 'y' in self.axes:
+                side.append(1)
+            if 'z' in self.axes:
+                side.append(2)
+            side = np.random.choice(side)
+        xb = [points[:, side].min(), points[:, side].max()]
+
+        if isinstance(self.part_ratio, float):
+            length = np.random.uniform(self.part_ratio * (xb[1] - xb[0]), (xb[1] - xb[0]))
+        elif isinstance(self.part_ratio, (tuple, list)):
+            length = np.random.uniform(self.part_ratio[0] * (xb[1] - xb[0]),
+                                       self.part_ratio[1] * (xb[1] - xb[0]))
+        else:
+            raise TypeError
+
+        indices = (points[:, side] - xb[0]) > length
+        points = points[indices]
         if normals is not None:
-            data["normals"] = normals[indices]
+            normals = normals[indices]
+
+        if self.rotate_object:
+            points = (rot.T @ points.T).T
+            if normals is not None:
+                normals = (rot.T @ normals.T).T
+
+        data = {None: points.astype(np.float32),
+                "rot": rot}
+        if normals is not None:
+            data["normals"] = normals.astype(np.float32)
 
         if self.transform is not None:
             data = self.transform(data)
@@ -406,10 +443,38 @@ class BlenderProcDepthPointCloudField(Field):
     def __init__(self,
                  transform=None,
                  unscale: bool = True,
-                 path_prefix: str = ""):
+                 undistort: bool = True,
+                 path_prefix: str = "",
+                 num_shards: int = 10,
+                 files_per_shard: int = 100,
+                 depth_trunc: int = 10,
+                 fuse: Union[int, Tuple[int, int]] = 0,
+                 fuse_thresholds: Tuple[float] = (0.3, 1.0, 0.1)):
         self.transform = transform
         self.unscale = unscale
+        self.undistort = undistort
         self.path_prefix = path_prefix
+        self.num_shards = num_shards
+        self.files_per_shard = files_per_shard
+        self.depth_trunc = depth_trunc
+        self.fuse = fuse
+        self.fuse_thresholds = fuse_thresholds
+
+        self.swap_xy = np.array([[0, 1, 0],
+                                 [1, 0, 0],
+                                 [0, 0, -1]])
+        self.swap_yz = np.array([[1, 0, 0],
+                                 [0, 0, 1],
+                                 [0, -1, 0]])
+
+    def _get_points_from_depth(self, depth, camera_intrinsic, camera_extrinsic):
+        pcd = convert_depth_image_to_point_cloud(depth,
+                                                 camera_intrinsic,
+                                                 camera_extrinsic,
+                                                 depth_trunc=self.depth_trunc)
+        points = np.asarray(pcd.points)
+        points = (self.swap_yz @ points.T).T  # Change Blender to ShapeNet coordinate frame
+        return points
 
     def load(self, model_path, idx, category):
         if self.path_prefix:
@@ -418,48 +483,85 @@ class BlenderProcDepthPointCloudField(Field):
             model_path = os.path.join(self.path_prefix, synthset, model)
         path_to_camera_json = os.path.join(model_path, "camera.json")
 
-        shard = np.random.randint(10)
-        file = np.random.randint(100)
+        shard = np.random.randint(self.num_shards)
+        file = np.random.randint(self.files_per_shard)
 
         chunk_path = os.path.join(model_path, "train_pbr", str(shard).zfill(6))
         path_to_scene_camera_json = os.path.join(chunk_path, "scene_camera.json")
 
         camera_parameters = get_camera_parameters_from_blenderproc_bopwriter(path_to_scene_camera_json,
                                                                              path_to_camera_json,
-                                                                             scene_id=file)[0]
-        pcd = convert_depth_image_to_point_cloud(os.path.join(chunk_path, "depth", str(file).zfill(6) + ".png"),
-                                                 camera_intrinsic=camera_parameters.intrinsic,
-                                                 camera_extrinsic=camera_parameters.extrinsic,
-                                                 depth_trunc=10)
-        points = np.asarray(pcd.points)
-        scale = np.load(os.path.join(model_path, "train_pbr", "scales.npy"))[shard]
-        cam = camera_parameters.extrinsic
+                                                                             scene_id=-1 if self.fuse else file)
+        if self.fuse:
+            chosen_cam_params = camera_parameters[file]
+            chosen_location = -chosen_cam_params.extrinsic[:3, :3].T @ chosen_cam_params.extrinsic[:3, 3]
+            other_locations = np.vstack([-c.extrinsic[:3, :3].T @ c.extrinsic[:3, 3] for c in camera_parameters])
+            distances = np.abs(other_locations - chosen_location)
+            indices = np.arange(len(distances))
+            within_x = distances[:, 0] <= self.fuse_thresholds[0]
+            within_y = distances[:, 1] <= self.fuse_thresholds[1]
+            within_z = distances[:, 2] <= self.fuse_thresholds[2]
+            same_sign_y = np.sign(other_locations[:, 1]) == np.sign(chosen_location[1])
+            same_sign_z = np.sign(other_locations[:, 2]) == np.sign(chosen_location[2])
+            n_closest = indices[within_x & within_y & within_z & same_sign_y & same_sign_z]
+            n_closest = n_closest[n_closest != file]
 
-        swap_xy = np.array([[0, 1, 0],
-                            [1, 0, 0],
-                            [0, 0, -1]])
-        swap_yz = np.array([[1, 0, 0],
-                            [0, 0, 1],
-                            [0, -1, 0]])
+            if isinstance(self.fuse, (tuple, list)):
+                fuse = np.random.randint(*self.fuse)
+            else:
+                fuse = self.fuse
+            if fuse == 0:
+                n_closest = []
+            elif len(n_closest) > fuse:
+                n_closest = np.random.choice(n_closest, size=fuse, replace=False)
+        else:
+            chosen_cam_params = camera_parameters[0]
+            n_closest = []
+
+        depth = os.path.join(chunk_path, "depth", str(file).zfill(6) + ".png")
+        points = self._get_points_from_depth(depth,
+                                             chosen_cam_params.intrinsic,
+                                             chosen_cam_params.extrinsic)
+        scale_path = os.path.join(model_path, "train_pbr", "scales.npy")
+        if not os.path.exists(scale_path):
+            scale_path = os.path.join(model_path, "scales.npy")
+        scale = np.load(scale_path)[shard]
+        cam = chosen_cam_params.extrinsic
+
         rot = cam[:3, :3]  # Blender world to camera rotation (rotates points from world to camera frame)
         trans = cam[:3, 3]  # Camera location in camera coordinates
 
-        points = (swap_yz @ points.T).T  # Change Blender to ShapeNet coordinate frame
-
         camera = -rot.T @ trans  # Camera location in Blender world coordinates
-        camera = swap_yz @ camera  # Camera location in ShapeNet coordinates
+        camera = self.swap_yz @ camera  # Camera location in ShapeNet coordinates
 
-        rot = swap_xy @ rot @ swap_yz.T  # Shapenet to camera rotation (rotates points from ShapeNet to camera frame)
+        # Shapenet to camera rotation (rotates points from ShapeNet to camera frame)
+        rot = self.swap_xy @ rot @ self.swap_yz.T
         x_angle = np.arctan2(rot.T[2, 1], rot.T[2, 2])
         x_angle = -np.rad2deg(x_angle - np.pi if x_angle > 0 else x_angle)  # Todo: why?
 
-        if self.unscale:
-            points /= scale
+        for n in n_closest:
+            depth = os.path.join(chunk_path, "depth", str(n).zfill(6) + ".png")
+            intrinsic = camera_parameters[n].intrinsic
+            extrinsic = camera_parameters[n].extrinsic
+            points = np.concatenate([points, self._get_points_from_depth(depth, intrinsic, extrinsic)])
 
         data = {None: points.astype(np.float32),
                 "rot": rot,
                 "cam": camera,
                 "x_angle": x_angle}
+
+        if self.unscale or self.undistort:
+            data["scale"] = scale
+            if self.unscale and self.undistort:
+                data[None] /= scale
+            elif self.unscale:
+                if isinstance(scale, float):
+                    data[None] /= scale
+                else:
+                    data[None] /= scale[1]
+            elif self.undistort and not isinstance(scale, float):
+                data[None] /= scale
+                data[None] *= scale[1]
 
         if self.transform is not None:
             data = self.transform(data)

@@ -1,0 +1,11 @@
+inherit_from: configs/pointcloud/shapenet_grid32_depth_like_world_center_bottle.yaml
+data:
+  voxelize: 0.002
+training:
+  out_dir: out/bottle/voxelize
+  batch_size: 16
+  batch_size_val: 16
+  print_every: 20
+  visualize_every: 2000
+  validate_every: 200
+  max_iter: 40000

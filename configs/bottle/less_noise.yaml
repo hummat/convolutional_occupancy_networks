@@ -1,0 +1,14 @@
+inherit_from: configs/agile/shapenet_grid32_depth_like_world.yaml
+data:
+  classes: [ "02876657" ]
+  path: data/ShapeNet/extra
+  pointcloud_noise: 0.001
+training:
+  out_dir: out/bottle/less_noise
+  visualize_every: 1000
+  validate_every: 1000
+  checkpoint_every: 1000
+  backup_every: 1000
+  max_iter: 20000
+generation:
+  vis_n_outputs: 10

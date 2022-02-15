@@ -5,6 +5,7 @@ data:
   watertight_path: data/watertight
   mesh_path: /home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1
   mesh_file: 'model.off'
+  voxels_file: 'model.binvox'
   path_prefix: null
   sample_upper_hemisphere: false
   classes: null
@@ -32,12 +33,13 @@ data:
   pointcloud_target_n: 1024
   pointcloud_noise: 0.05
   rotate: false
-  scale: false
+  scale: null
   normalize: false
   visualize: false
-  voxels_file: 'model.binvox'
   padding: 0.1
   occ_from_sdf: false
+  voxelize: false
+  fuse: 0
 model:
   decoder: simple
   encoder: resnet18
