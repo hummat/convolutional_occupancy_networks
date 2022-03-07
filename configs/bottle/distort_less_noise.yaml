@@ -1,0 +1,7 @@
+inherit_from: configs/pointcloud/shapenet_grid32_depth_like_world_center_bottle.yaml
+data:
+  scale: xz
+  pointcloud_noise: 0.001
+training:
+  out_dir: out/bottle/distort_less_noise
+  max_iter: 20000

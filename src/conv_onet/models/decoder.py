@@ -53,19 +53,19 @@ class LocalDecoder(nn.Module):
         self.padding = padding
 
     def sample_plane_feature(self, p, c, plane='xz'):
-        xy = normalize_coordinate(p.clone(), plane=plane, padding=self.padding)  # normalize to the range of (0, 1)
+        xy = normalize_coordinate(p.detach().clone(), plane=plane, padding=self.padding)  # normalize to the range of (0, 1)
         xy = xy[:, :, None].float()
         vgrid = 2.0 * xy - 1.0  # normalize to (-1, 1)
         c = F.grid_sample(c, vgrid, padding_mode='border', align_corners=True, mode=self.sample_mode).squeeze(-1)
         return c
 
     def sample_grid_feature(self, p, c):
-        p_nor = normalize_3d_coordinate(p.clone(), padding=self.padding)  # normalize to the range of (0, 1)
-        p_nor = p_nor[:, :, None, None].float()
-        vgrid = 2.0 * p_nor - 1.0  # normalize to (-1, 1)
-        # acutally trilinear interpolation if mode = 'bilinear'
-        c = F.grid_sample(c, vgrid, padding_mode='border', align_corners=True, mode=self.sample_mode).squeeze(
-            -1).squeeze(-1)
+        p_nor = normalize_3d_coordinate(p.detach().clone(), padding=self.padding)  # normalize to the range of (0, 1)
+        p_nor[:, 0], p_nor[:, 2] = p_nor[:, 2], p_nor[:, 0]  # Swap xz axes for grid sampling (kji, i.e. zyx convention)
+        p_nor = 2.0 * p_nor - 1.0  # Normalize to (-1, 1) for grid sampling
+        vgrid = p_nor[:, :, None, None].float()
+        # Actually trilinear interpolation if mode = 'bilinear' when applied to 3D data
+        c = F.grid_sample(c, vgrid, padding_mode='border', align_corners=True, mode=self.sample_mode).squeeze(-1).squeeze(-1)
         return c
 
     def forward(self, p, c_plane, **kwargs):

@@ -210,8 +210,8 @@ def get_inputs_field(cfg):
                                                    transform,
                                                    cfg['data']['multi_files'],
                                                    part_ratio=cfg['data']['part_ratio'],
-                                                   rotate_object='y',
-                                                   axes='z')
+                                                   rotate_object='',
+                                                   axes='xyz')
     elif input_type == 'depth_like':
         inputs_field = data.DepthLikePointCloudField(cfg['data']['mesh_file'] if cfg['data']['mesh_file'] else cfg['data']['pointcloud_file'],
                                                      rotate_object='yx',

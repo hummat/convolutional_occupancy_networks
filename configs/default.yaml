@@ -10,7 +10,7 @@ data:
   sample_upper_hemisphere: false
   classes: null
   input_type: img
-  part_ratio: 0.7
+  part_ratio: 0.5
   train_split: train
   val_split: val
   test_split: test

@@ -9,6 +9,7 @@ data:
   points_file: points.npz
   points_iou_file: points.npz
   voxels_file: 'model.binvox'
+  part_ratio: 0.5
 model:
   encoder: pointnet_local_pool
   encoder_kwargs:
