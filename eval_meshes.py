@@ -95,13 +95,11 @@ def single_eval(batch, args, generation_dir, dataset, cfg):
 
     # Evaluate point cloud
     if cfg['test']['eval_pointcloud']:
-        pointcloud_file = os.path.join(
-            pointcloud_dir, '%s.ply' % modelname)
+        pointcloud_file = os.path.join(pointcloud_dir, '%s.ply' % modelname)
 
         if os.path.exists(pointcloud_file):
             pointcloud = load_pointcloud(pointcloud_file)
-            eval_dict_pcl = evaluator.eval_pointcloud(
-                pointcloud, pointcloud_tgt)
+            eval_dict_pcl = evaluator.eval_pointcloud(pointcloud, pointcloud_tgt)
             for k, v in eval_dict_pcl.items():
                 eval_dict[k + ' (pcl)'] = v
         else:

@@ -61,7 +61,7 @@ class LocalDecoder(nn.Module):
 
     def sample_grid_feature(self, p, c):
         p_nor = normalize_3d_coordinate(p.detach().clone(), padding=self.padding)  # normalize to the range of (0, 1)
-        p_nor[:, 0], p_nor[:, 2] = p_nor[:, 2], p_nor[:, 0]  # Swap xz axes for grid sampling (kji, i.e. zyx convention)
+        # p_nor[:, 0], p_nor[:, 2] = p_nor[:, 2], p_nor[:, 0]  # Swap xz axes for grid sampling (kji, i.e. zyx convention)
         p_nor = 2.0 * p_nor - 1.0  # Normalize to (-1, 1) for grid sampling
         vgrid = p_nor[:, :, None, None].float()
         # Actually trilinear interpolation if mode = 'bilinear' when applied to 3D data

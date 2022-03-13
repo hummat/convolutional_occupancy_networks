@@ -31,14 +31,15 @@ training:
   pre_trained_weights: https://s3.eu-central-1.amazonaws.com/avg-projects/convolutional_occupancy_networks/models/pointcloud/shapenet_grid32.pt
   out_dir: out/pointcloud/shapenet_grid32_partial
   batch_size: 32
+  batch_size_val: 32
   model_selection_metric: iou
   model_selection_mode: maximize
   max_iter: 100000
   print_every: 100
-  visualize_every: 10000
-  validate_every: 10000
+  visualize_every: 2000
+  validate_every: 2000
   checkpoint_every: 2000
-  backup_every: 10000
+  backup_every: 2000
   n_workers: 8
   n_workers_val: 4
 test:

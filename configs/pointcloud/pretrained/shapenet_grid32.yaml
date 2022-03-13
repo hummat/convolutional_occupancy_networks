@@ -1,5 +1,7 @@
 inherit_from: configs/pointcloud/shapenet_grid32.yaml
+data:
+  classes: ["02691156"]
 generation:
-  generation_dir: generation_pretrained
+  generation_dir: generation_pretrained2
 test:
   model_file: https://s3.eu-central-1.amazonaws.com/avg-projects/convolutional_occupancy_networks/models/pointcloud/shapenet_grid32.pt
