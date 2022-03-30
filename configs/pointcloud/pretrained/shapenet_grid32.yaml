@@ -1,6 +1,4 @@
 inherit_from: configs/pointcloud/shapenet_grid32.yaml
-data:
-  classes: ["02691156"]
 generation:
   generation_dir: generation_pretrained2
 test:
