@@ -59,7 +59,7 @@ def process_mesh(mesh, padding: float = 0, flip_yz: bool = True, with_transforms
 
 def from_pointcloud(use_trimesh=True, visualize=True):
     path_prefix = "/home/matthias/Data/Ubuntu/git/convolutional_occupancy_networks"
-    default_path = os.path.join(path_prefix, "configs/default.yaml")
+    default_path = os.path.join(path_prefix, "configs/default_new.yaml")
     model_path = os.path.join(path_prefix, "configs/pointcloud/shapenet_grid32_depth_like_upper.yaml")
     cfg = config.load_config(model_path, default_path)
     device = torch.device("cuda")
@@ -184,7 +184,7 @@ def from_pointcloud(use_trimesh=True, visualize=True):
 def data_test():
     seed_all_rng()
 
-    #cfg = config.load_config(os.path.abspath('configs/bottle/partial.yaml'), 'configs/default.yaml')
+    #cfg = config.load_config(os.path.abspath('configs/bottle/partial.yaml'), 'configs/default_new.yaml')
     #model = config.get_model(cfg)
     #model.load_state_dict(torch.load(os.path.abspath("out/pointcloud/shapenet_grid32_partial/model_best.pt"))["model"])
     #model.eval()
@@ -284,7 +284,7 @@ def loader_test():
     seed_all_rng(0)
     generator = torch.Generator().manual_seed(0)
 
-    cfg = config.load_config(os.path.abspath('configs/agile/test.yaml'), 'configs/default.yaml')
+    cfg = config.load_config(os.path.abspath('configs/agile/test.yaml'), 'configs/default_new.yaml')
     dataset = config.get_dataset('train', cfg, return_idx=False)
 
     print(f"Using {cpu_count()} CPUs.")
