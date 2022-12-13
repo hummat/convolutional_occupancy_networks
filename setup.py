@@ -54,6 +54,7 @@ mise_module = Extension(
     sources=[
         'src/utils/libmise/mise.pyx'
     ],
+    include_dirs=[numpy_include_dir]
 )
 
 # simplify (efficient mesh simplification)
