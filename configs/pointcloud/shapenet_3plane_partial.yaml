@@ -23,10 +23,10 @@ model:
   decoder: simple_local
   decoder_kwargs:
     sample_mode: bilinear # bilinear / nearest
-    hidden_size: 32
+    hidden_dim: 32
   c_dim: 32
 training:
-  out_dir: out/pointcloud/shapenet_3plane_partial
+  out_dir: out/pointcloud/partial_shapenet
   batch_size: 32
   model_selection_metric: iou
   model_selection_mode: maximize

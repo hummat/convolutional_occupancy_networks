@@ -1,12 +1,16 @@
 method: conv_onet
 data:
   dataset: Shapes3D
-  path: data/ShapeNet
+  path: data/ShapeNet/core
   watertight_path: data/watertight
   mesh_path: /home/matthias/Data2/datasets/shapenet/ShapeNetCore.v1
   mesh_file: 'model.off'
+  voxels_file: 'model.binvox'
+  path_prefix: null
+  sample_upper_hemisphere: false
   classes: null
   input_type: img
+  part_ratio: 0.7
   train_split: train
   val_split: val
   test_split: test
@@ -28,15 +32,14 @@ data:
   pointcloud_n: 256
   pointcloud_target_n: 1024
   pointcloud_noise: 0.05
-  voxels_file: 'model.binvox'
+  rotate: false
+  scale: null
+  normalize: false
+  visualize: false
   padding: 0.1
-  part_ratio: 0.3
   occ_from_sdf: false
   voxelize: false
-  visualize: false
-  scale: null
-  rotate: false
-  normalize: false
+  fuse: 0
 model:
   decoder: simple
   encoder: resnet18
@@ -45,8 +48,11 @@ model:
   multi_gpu: false
   c_dim: 512
 training:
-  out_dir:  out/default
+  pre_trained_weights:
+  out_dir: out/default
   batch_size: 64
+  batch_size_val: 1
+  batch_size_test: 1
   print_every: 200
   visualize_every: 1000
   checkpoint_every: 1000
@@ -58,6 +64,8 @@ training:
   n_workers: 4
   n_workers_val: 4
   loss:
+  validate_first: false
+  max_iter:
   in_cam_coords: false
   in_world_coords: false
 test:
@@ -66,12 +74,14 @@ test:
   eval_pointcloud: true
   remove_wall: false
   model_file: model_best.pt
+  n_workers: 16
 generation:
-  batch_size: 100000
+  batch_size: 1000000
+  normals: false
   refinement_step: 0
   vis_n_outputs: 30
   generate_mesh: true
-  generate_pointcloud: true
+  generate_pointcloud: false
   generation_dir: generation
   use_sampling: false
   resolution_0: 32
@@ -85,4 +95,5 @@ generation:
   latent_ny: 2
   latent_nx: 2
   latent_repeat: true
-  sliding_window: False # added for crop generation
+  sliding_window: false # added for crop generation
+  use_skimage: false

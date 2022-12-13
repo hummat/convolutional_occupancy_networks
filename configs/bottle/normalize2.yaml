@@ -1,0 +1,6 @@
+inherit_from: configs/pointcloud/shapenet_grid32_depth_like_world_center_bottle.yaml
+data:
+  normalize: true
+training:
+  out_dir: /home/matthias/Data/Ubuntu/git/completion-and-reconstruction/agile/out/conv_onet/shapenet_grid32_depth_like/bottle_ycb_2
+  max_iter: 20000

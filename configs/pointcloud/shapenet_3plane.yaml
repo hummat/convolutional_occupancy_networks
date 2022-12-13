@@ -1,14 +1,14 @@
 method: conv_onet
 data:
   input_type: pointcloud
-  classes: ["02876657", "02880940", "02946921", "03797390"]
-  path: data/ShapeNet/extra
+  classes: null
+  path: data/ShapeNet/core
   pointcloud_n: 3000
   pointcloud_noise: 0.005
   points_subsample: 2048
   points_file: points.npz
   points_iou_file: points.npz
-  voxels_file: 'model.binvox'
+  voxels_file: null
 model:
   encoder: pointnet_local_pool
   encoder_kwargs:
@@ -23,14 +23,14 @@ model:
   decoder: simple_local
   decoder_kwargs:
     sample_mode: bilinear # bilinear / nearest
-    hidden_size: 32
+    hidden_dim: 32
   c_dim: 32
 training:
   out_dir: out/pointcloud/shapenet_3plane
   batch_size: 32
   model_selection_metric: iou
   model_selection_mode: maximize
-  print_every: 100
+  print_every: 1000
   visualize_every: 10000
   validate_every: 10000
   checkpoint_every: 2000

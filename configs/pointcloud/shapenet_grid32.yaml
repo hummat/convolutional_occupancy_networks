@@ -8,14 +8,15 @@ data:
   points_subsample: 2048
   points_file: points.npz
   points_iou_file: points.npz
-  voxels_file: 'model.binvox'
+  # points_unpackbits: false
+  voxels_file: null
 model:
   encoder: pointnet_local_pool
   encoder_kwargs:
     hidden_dim: 32
     plane_type: 'grid'
     grid_resolution: 32
-    unet3d: true
+    unet3d: True
     unet3d_kwargs:
       num_levels: 3
       f_maps: 32
